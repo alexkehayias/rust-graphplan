@@ -1,6 +1,7 @@
 #![crate_name = "graphplan"]
 use std::collections::HashSet;
 use std::iter::FromIterator;
+use std::hash::{Hash,Hasher};
 
 
 /// Create a **HashSet** from a list of elements. Implementation
@@ -76,14 +77,20 @@ fn propositions_can_be_negated() {
     };
 }
 
-// TODO: Support HashSet<Action>, need to do the hashing based on the
-// name of the action. That would simplify a lot of the operations
-
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Action {
     name: &'static str,
     reqs: HashSet<Proposition>,
     effects: HashSet<Proposition>,
+}
+
+/// Actions are hashed based on their name, that means you can't have
+/// two actions of the same name in a HashSet even if they have
+/// different reqs and effects
+impl Hash for Action {
+    fn hash<H>(&self, state: &mut H) where H: Hasher {
+        self.name.hash(state);
+    }
 }
 
 impl Action {
@@ -92,7 +99,7 @@ impl Action {
     }
 }
 
-pub type ActionLayerData = Vec<Action>;
+pub type ActionLayerData = HashSet<Action>;
 pub type PropositionLayerData = HashSet<Proposition>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -109,9 +116,9 @@ impl Layer {
     /// #[macro_use] extern crate graphplan;
     /// use graphplan::Layer;
     /// let prop_layer = Layer::PropositionLayer(hashset!{});
-    /// Layer::from_layer(vec![], Option::None, prop_layer);
+    /// Layer::from_layer(hashset![], Option::None, prop_layer);
     /// ```
-    pub fn from_layer(all_actions: Vec<Action>,
+    pub fn from_layer(all_actions: HashSet<Action>,
                       prev_layer: Option<Layer>,
                       layer: Layer)
                       -> Layer {
@@ -145,7 +152,7 @@ impl Layer {
                     for a in all_actions {
                         // if a has all props push it to layer
                         if a.reqs.is_subset(&props_hash) {
-                            al.push(a)
+                            al.insert(a);
                         }
                     }
                 }
@@ -154,16 +161,16 @@ impl Layer {
         }
     }
     /// Returns a set of propositions that are mutually exclusive
-    pub fn proposition_mutexes(actions: Vec<Action>,
+    pub fn proposition_mutexes(actions: HashSet<Action>,
                                props: HashSet<Proposition>)
                                -> HashSet<Proposition> {
 
         props
     }
 
-    pub fn action_mutexes(actions: Vec<Action>,
+    pub fn action_mutexes(actions: HashSet<Action>,
                           props: HashSet<Proposition>)
-                          -> Vec<Action> {
+                          -> HashSet<Action> {
         actions
     }
 }
@@ -203,12 +210,12 @@ fn integration() {
         hashset!{p2.clone().negate()},
     );
 
-    let all_actions = vec![a1.clone(), a2.clone()];
+    let all_actions = hashset!{a1.clone(), a2.clone()};
 
     let props = hashset!{p1.clone(), p2.clone()};
     let prop_l1 = Layer::PropositionLayer(props.clone());
     let mutex_props_l1 = Layer::proposition_mutexes(
-        vec![],
+        hashset!{},
         props.clone()
     );
 
@@ -218,7 +225,7 @@ fn integration() {
         Option::None,
         prop_l1.clone()
     );
-    let expected_action_l1 = Layer::ActionLayer(vec![a1.clone()]);
+    let expected_action_l1 = Layer::ActionLayer(hashset!{a1.clone()});
     assert!(expected_action_l1 == action_l1,
             format!("{:?} != {:?}", expected_action_l1, action_l1));
 
