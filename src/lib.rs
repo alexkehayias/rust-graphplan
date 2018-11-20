@@ -1,9 +1,12 @@
 #![crate_name = "graphplan"]
 use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::iter::FromIterator;
+use std::fmt;
+use std::cmp::{Ordering};
 use std::hash::{Hash,Hasher};
 
-
+#[macro_export]
 /// Create a **HashSet** from a list of elements. Implementation
 /// copied from the maplit library https://github.com/bluss/maplit
 ///
@@ -19,7 +22,6 @@ use std::hash::{Hash,Hasher};
 /// assert!(!set.contains("c"));
 /// # }
 /// ```
-#[macro_export]
 macro_rules! hashset {
     (@single $($x:tt)*) => (());
     (@count $($rest:expr),*) => (<[()]>::len(&[$(hashset!(@single $rest)),*]));
@@ -37,11 +39,53 @@ macro_rules! hashset {
     };
 }
 
+#[macro_export]
+/// Create a **BTreeSet** from a list of elements. Implementation
+/// copied from the maplit library https://github.com/bluss/maplit
+///
+/// ## Example
+///
+/// ```
+/// #[macro_use] extern crate graphplan;
+/// # fn main() {
+///
+/// let set = btreeset!{"a", "b"};
+/// assert!(set.contains("a"));
+/// assert!(set.contains("b"));
+/// assert!(!set.contains("c"));
+/// # }
+/// ```
+macro_rules! btreeset {
+    ($($key:expr,)+) => (btreeset!($($key),+));
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+    ( $($key:expr),* ) => {
+        {
+            let mut _set = ::std::collections::BTreeSet::new();
+            $(
+                _set.insert($key);
+            )*
+            _set
+        }
+    };
+}
+
+
+#[derive(Eq, PartialEq, Clone, Ord, PartialOrd)]
 pub struct Proposition {
     name: &'static str,
     negation: bool,
+}
+
+impl fmt::Debug for Proposition {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}P:{}", if self.negation {"¬"} else {""}, self.name)
+    }
+}
+
+impl Hash for Proposition {
+    fn hash<H>(&self, state: &mut H) where H: Hasher {
+        self.name.hash(state);
+    }
 }
 
 impl Proposition {
@@ -49,9 +93,8 @@ impl Proposition {
         Proposition {name: name, negation: false}
     }
 
-    pub fn negate(&mut self) -> Proposition {
-        self.negation = !self.negation;
-        self.to_owned()
+    pub fn negate(self) -> Proposition {
+        Proposition { name: self.name, negation: !self.negation }
     }
 
     pub fn is_negation(&mut self, prop: &Proposition) -> bool {
@@ -62,26 +105,29 @@ impl Proposition {
 #[test]
 fn propositions_can_be_negated() {
     let mut p1 = Proposition::from_str("test");
-    assert!(false == p1.negation);
-    assert!(true == p1.negate().negation);
-    let mut p2 = Proposition::from_str("test");
+    {
+        assert!(false == p1.negation);
+    }
 
+    assert!(true == Proposition::from_str("test").negate().negation);
+
+    let p2 = Proposition::from_str("test").negate();
     {
         assert!(p1.is_negation(&p2));
     }
-
-    p2.negate();
-
-    {
-        assert!(false == p1.is_negation(&p2))
-    };
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Eq, PartialEq, Clone)]
 pub struct Action {
     name: &'static str,
     reqs: HashSet<Proposition>,
     effects: HashSet<Proposition>,
+}
+
+impl fmt::Debug for Action {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "A:{} {{req: {:?} effects: {:?}}}", self.name, self.reqs, self.effects)
+    }
 }
 
 /// Actions are hashed based on their name, that means you can't have
@@ -90,6 +136,18 @@ pub struct Action {
 impl Hash for Action {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
         self.name.hash(state);
+    }
+}
+
+impl Ord for Action {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.name).cmp(&(other.name))
+    }
+}
+
+impl PartialOrd for Action {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -107,6 +165,37 @@ pub enum Layer {
     ActionLayer(ActionLayerData),
     PropositionLayer(PropositionLayerData),
 }
+
+/// Returns the pairs of a set of items
+pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<(T, T)> {
+    let mut accum = Vec::new();
+
+    // TODO maybe try to borrow this instead?
+    let mut sorted = items.clone();
+    sorted.sort();
+
+    for i in sorted.iter().cloned() {
+        for j in sorted.iter().cloned() {
+            if i != j && j > i {
+                accum.push((i.clone(), j.clone()));
+            }
+        }
+    }
+    accum
+}
+
+#[test]
+pub fn test_pairs() {
+    let p1 = Proposition::from_str("a");
+    let p2 = Proposition::from_str("b");
+    let p3 = Proposition::from_str("c");
+    assert_eq!(
+        vec![(p1.clone(), p2.clone()), (p1.clone(), p3.clone()), (p2.clone(), p3.clone())],
+        pairs(vec![p1.clone(), p2.clone(), p3.clone()])
+    );
+}
+
+type MutexPairs<T> = HashSet<BTreeSet<T>>;
 
 impl Layer {
     /// Create a new layer from another. ActionLayer returns a
@@ -160,19 +249,130 @@ impl Layer {
             },
         }
     }
+
+    pub fn action_mutexes(_actions: HashSet<Action>,
+                          _props: Vec<(Proposition, Proposition)>)
+                          -> Vec<(Action, Action)> {
+        let mutexes = Vec::new();
+        // TODO Inconsistent effects: The effect of one action is the
+        // negation of another
+
+        // TODO Interference: One action deletes the precondition of
+        // another action (they can't be done in parallel then)
+
+        // TODO Competing needs: Another action has precondition that
+        // is mutex
+
+        mutexes
+    }
+
     /// Returns a set of propositions that are mutually exclusive
-    pub fn proposition_mutexes(actions: HashSet<Action>,
-                               props: HashSet<Proposition>)
-                               -> HashSet<Proposition> {
+    ///
+    /// Propositions are mutex if
+    /// - They are negations of one another
+    /// - All ways of achieving the propositions at are pairwise mutex
+    /// Uses btrees because they are hashable due to insertion order
+    pub fn proposition_mutexes(
+        props: HashSet<Proposition>,
+        actions: HashSet<Action>,
+        mutex_actions: MutexPairs<Action>,
+    ) -> MutexPairs<Proposition> {
+        let mut mutexes = MutexPairs::new();
 
-        props
-    }
+        // Find mutexes due to negation
+        for p in props.iter() {
+            let not_p = p.clone().negate();
+            if props.contains(&not_p) {
+                mutexes.insert(btreeset!{p.clone(), not_p.clone()});
+            }
+        }
 
-    pub fn action_mutexes(actions: HashSet<Action>,
-                          props: HashSet<Proposition>)
-                          -> HashSet<Action> {
-        actions
+        // Mutex when all ways of achieving p are mutex
+        // - Get all uniq pairs of propositions
+        // - For each pair, get all uniq action pairs that could output the prop pair
+        // - Set difference with the mutex_actions
+        // - If there is no difference then the props are mutex
+        if !mutex_actions.is_empty() {
+            let prop_vec: Vec<Proposition> = props.into_iter().collect();
+            for (p1, p2) in pairs(prop_vec) {
+                let viable_acts: Vec<Action> = actions.clone()
+                    .into_iter()
+                    .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
+                    .collect();
+                let viable_act_pairs: HashSet<BTreeSet<Action>> = pairs(viable_acts)
+                    .into_iter()
+                    .map(|(a1, a2)| btreeset!{a1, a2})
+                    .collect();
+
+                let diff: HashSet<_> = viable_act_pairs
+                    .difference(&mutex_actions)
+                    .collect();
+
+                if diff.is_empty() {
+                    mutexes.insert(btreeset!{p1.clone(), p2.clone()});
+                }
+            }
+        }
+        mutexes
     }
+}
+
+#[test]
+fn proposition_mutexes_due_to_negation() {
+    let props = hashset!{
+        Proposition::from_str("caffeinated"),
+        Proposition::from_str("caffeinated").negate(),
+        Proposition::from_str("tired"),
+    };
+    let actions = hashset!{};
+    let action_mutexes = MutexPairs::new();
+    let expected = hashset!{
+        btreeset!{Proposition::from_str("caffeinated"),
+                  Proposition::from_str("caffeinated").negate()}
+    };
+    assert_eq!(expected, Layer::proposition_mutexes(props, actions, action_mutexes));
+}
+
+#[test]
+fn proposition_mutexes_due_to_mutex_actions() {
+    let props = hashset!{
+        Proposition::from_str("caffeinated"),
+        Proposition::from_str("coffee"),
+    };
+    let actions = hashset!{};
+    let action_mutexes = hashset!{
+        btreeset!{
+            Action::new(
+                "drink coffee",
+                hashset!{Proposition::from_str("coffee")},
+                hashset!{Proposition::from_str("caffeinated"),
+                         Proposition::from_str("coffee").negate()},
+            ),
+            Action::new(
+                "make coffee",
+                hashset!{},
+                hashset!{Proposition::from_str("coffee")},
+            ),
+        }
+    };
+    let expected = hashset!{
+        btreeset!{Proposition::from_str("caffeinated"),
+                  Proposition::from_str("coffee")}
+    };
+    assert_eq!(expected, Layer::proposition_mutexes(props, actions, action_mutexes));
+}
+
+#[test]
+fn action_mutexes() {
+    let actions = hashset!{
+        Action::new("drink coffee",
+                    hashset!{},
+                    hashset!{})
+    };
+    let props = vec![
+    ];
+    let expected: Vec<(Action, Action)> = vec![];
+    assert_eq!(expected, Layer::action_mutexes(actions, props));
 }
 
 pub struct PlanGraph {
@@ -214,10 +414,10 @@ fn integration() {
 
     let props = hashset!{p1.clone(), p2.clone()};
     let prop_l1 = Layer::PropositionLayer(props.clone());
-    let mutex_props_l1 = Layer::proposition_mutexes(
-        hashset!{},
-        props.clone()
-    );
+    // let mutex_props_l1 = Layer::proposition_mutexes(
+    //     vec![],
+    //     props.clone()
+    // );
 
     // Generate the action layer
     let action_l1 = Layer::from_layer(
