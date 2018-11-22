@@ -84,6 +84,7 @@ impl fmt::Debug for Proposition {
 
 impl Hash for Proposition {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
+        self.negation.hash(state);
         self.name.hash(state);
     }
 }
@@ -93,18 +94,20 @@ impl Proposition {
         Proposition {name: name, negation: false}
     }
 
-    pub fn negate(self) -> Proposition {
+    pub fn negate(&self) -> Proposition {
         Proposition { name: self.name, negation: !self.negation }
     }
 
-    pub fn is_negation(&mut self, prop: &Proposition) -> bool {
-        prop.name == self.name && prop.negation != self.negation
+    pub fn is_negation(&self, prop: &Proposition) -> bool {
+        prop.name == self.name && prop.negation == !self.negation
     }
 }
 
 #[test]
 fn propositions_can_be_negated() {
-    let mut p1 = Proposition::from_str("test");
+    // Sanity check
+    assert_eq!(Proposition::from_str("test"), Proposition::from_str("test"));
+    let p1 = Proposition::from_str("test");
     {
         assert!(false == p1.negation);
     }
@@ -112,6 +115,12 @@ fn propositions_can_be_negated() {
     assert!(true == Proposition::from_str("test").negate().negation);
 
     let p2 = Proposition::from_str("test").negate();
+    {
+        assert!(
+            p2.is_negation(&p1),
+            format!("{:?} is not a negation of {:?}", p1, p2)
+        );
+    }
     {
         assert!(p1.is_negation(&p2));
     }
@@ -250,15 +259,26 @@ impl Layer {
         }
     }
 
-    pub fn action_mutexes(_actions: HashSet<Action>,
-                          _props: Vec<(Proposition, Proposition)>)
-                          -> Vec<(Action, Action)> {
-        let mutexes = Vec::new();
-        // TODO Inconsistent effects: The effect of one action is the
-        // negation of another
+    pub fn action_mutexes(actions: HashSet<Action>,
+                          mutex_props: Option<MutexPairs<Proposition>>)
+                          -> MutexPairs<Action> {
+        let mutexes = MutexPairs::new();
+        let action_vec: Vec<Action> = actions.into_iter().collect();
+        let action_pairs = pairs(action_vec);
 
-        // TODO Interference: One action deletes the precondition of
-        // another action (they can't be done in parallel then)
+        for (a1, a2) in action_pairs {
+            // TODO Inconsistent effects: The effect of one action is the
+            // negation of another
+            // - Negate the effects of one of the actions then check the overlap
+            // - If there is any overlap the two actions are mutex
+
+            // TODO Interference: One action deletes the precondition of
+            // another action (they can't be done in parallel then)
+        }
+
+
+
+
 
         // TODO Competing needs: Another action has precondition that
         // is mutex
@@ -275,46 +295,59 @@ impl Layer {
     pub fn proposition_mutexes(
         props: HashSet<Proposition>,
         actions: HashSet<Action>,
-        mutex_actions: MutexPairs<Action>,
+        mutex_actions: Option<MutexPairs<Action>>,
     ) -> MutexPairs<Proposition> {
         let mut mutexes = MutexPairs::new();
 
         // Find mutexes due to negation
         for p in props.iter() {
-            let not_p = p.clone().negate();
+            let not_p = p.negate();
             if props.contains(&not_p) {
                 mutexes.insert(btreeset!{p.clone(), not_p.clone()});
             }
         }
 
-        // Mutex when all ways of achieving p are mutex
+        // Find mutexes where all ways of achieving p are mutex
         // - Get all uniq pairs of propositions
         // - For each pair, get all uniq action pairs that could output the prop pair
         // - Set difference with the mutex_actions
         // - If there is no difference then the props are mutex
-        if !mutex_actions.is_empty() {
+        if let Some(mx_actions) = mutex_actions {
             let prop_vec: Vec<Proposition> = props.into_iter().collect();
             for (p1, p2) in pairs(prop_vec) {
                 let viable_acts: Vec<Action> = actions.clone()
                     .into_iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
                     .collect();
+
                 let viable_act_pairs: HashSet<BTreeSet<Action>> = pairs(viable_acts)
                     .into_iter()
                     .map(|(a1, a2)| btreeset!{a1, a2})
                     .collect();
 
                 let diff: HashSet<_> = viable_act_pairs
-                    .difference(&mutex_actions)
+                    .difference(&mx_actions)
                     .collect();
 
-                if diff.is_empty() {
+                if diff.is_empty() && !mx_actions.is_empty() {
                     mutexes.insert(btreeset!{p1.clone(), p2.clone()});
                 }
             }
         }
         mutexes
     }
+}
+
+#[test]
+fn proposition_hashing_works() {
+    let set = hashset!{Proposition::from_str("caffeinated")};
+    assert!(set.contains(&Proposition::from_str("caffeinated")));
+
+    let set = hashset!{Proposition::from_str("caffeinated").negate()};
+    assert!(set.contains(&Proposition::from_str("caffeinated").negate()));
+
+    let set = hashset!{Proposition::from_str("caffeinated").negate()};
+    assert!(!set.contains(&Proposition::from_str("caffeinated")));
 }
 
 #[test]
@@ -330,7 +363,15 @@ fn proposition_mutexes_due_to_negation() {
         btreeset!{Proposition::from_str("caffeinated"),
                   Proposition::from_str("caffeinated").negate()}
     };
-    assert_eq!(expected, Layer::proposition_mutexes(props, actions, action_mutexes));
+
+    assert_eq!(
+        expected,
+        Layer::proposition_mutexes(
+            props,
+            actions,
+            Some(action_mutexes)
+        )
+    );
 }
 
 #[test]
@@ -359,7 +400,10 @@ fn proposition_mutexes_due_to_mutex_actions() {
         btreeset!{Proposition::from_str("caffeinated"),
                   Proposition::from_str("coffee")}
     };
-    assert_eq!(expected, Layer::proposition_mutexes(props, actions, action_mutexes));
+    assert_eq!(
+        expected,
+        Layer::proposition_mutexes(props, actions, Some(action_mutexes))
+    );
 }
 
 #[test]
@@ -369,10 +413,9 @@ fn action_mutexes() {
                     hashset!{},
                     hashset!{})
     };
-    let props = vec![
-    ];
-    let expected: Vec<(Action, Action)> = vec![];
-    assert_eq!(expected, Layer::action_mutexes(actions, props));
+    let props = MutexPairs::new();
+    let expected = MutexPairs::new();
+    assert_eq!(expected, Layer::action_mutexes(actions, Some(props)));
 }
 
 pub struct PlanGraph {
