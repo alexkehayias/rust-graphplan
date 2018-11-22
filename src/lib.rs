@@ -1,6 +1,5 @@
 #![crate_name = "graphplan"]
 use std::collections::HashSet;
-use std::collections::BTreeSet;
 use std::iter::FromIterator;
 use std::fmt;
 use std::cmp::{Ordering};
@@ -175,8 +174,33 @@ pub enum Layer {
     PropositionLayer(PropositionLayerData),
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+/// A two element tuple that, when constructed via `new`, guarantees that
+/// (a, b) == (b, a)
+pub struct UniquePair<T: Ord + PartialEq + Eq>(T, T);
+
+impl <T> UniquePair<T> where T: Ord + PartialEq + Eq{
+    /// Constructs a UniquePair, insertion order is guaranteed so UniquePair p1, p2
+    /// is equivalent UniquePair p2, p1
+    fn new(item1: T, item2: T) -> UniquePair<T> {
+        // Can't think of a more elegant way to do this so since n is 2 can
+        // just stick this in a conditional
+        if item1 < item2 {
+            UniquePair(item1, item2)
+        } else {
+            UniquePair(item2, item1)
+        }
+    }
+}
+
+#[test]
+fn uniq_pair_test() {
+    assert_eq!(UniquePair::<&'static str>::new("test1", "test2"),
+               UniquePair::<&'static str>::new("test2", "test1"));
+}
+
 /// Returns the pairs of a set of items
-pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<(T, T)> {
+pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<UniquePair<T>> {
     let mut accum = Vec::new();
 
     // TODO maybe try to borrow this instead?
@@ -186,7 +210,7 @@ pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<(T, T)> {
     for i in sorted.iter().cloned() {
         for j in sorted.iter().cloned() {
             if i != j && j > i {
-                accum.push((i.clone(), j.clone()));
+                accum.push(UniquePair::new(i.clone(), j.clone()));
             }
         }
     }
@@ -199,12 +223,14 @@ pub fn test_pairs() {
     let p2 = Proposition::from_str("b");
     let p3 = Proposition::from_str("c");
     assert_eq!(
-        vec![(p1.clone(), p2.clone()), (p1.clone(), p3.clone()), (p2.clone(), p3.clone())],
+        vec![UniquePair::new(p1.clone(), p2.clone()),
+             UniquePair::new(p1.clone(), p3.clone()),
+             UniquePair::new(p2.clone(), p3.clone())],
         pairs(vec![p1.clone(), p2.clone(), p3.clone()])
     );
 }
 
-type MutexPairs<T> = HashSet<BTreeSet<T>>;
+type MutexPairs<T> = HashSet<UniquePair<T>>;
 
 impl Layer {
     /// Create a new layer from another. ActionLayer returns a
@@ -266,7 +292,7 @@ impl Layer {
         let action_vec: Vec<Action> = actions.into_iter().collect();
         let action_pairs = pairs(action_vec);
 
-        for (a1, a2) in action_pairs {
+        for UniquePair(a1, a2) in action_pairs {
             // TODO Inconsistent effects: The effect of one action is the
             // negation of another
             // - Negate the effects of one of the actions then check the overlap
@@ -303,7 +329,7 @@ impl Layer {
         for p in props.iter() {
             let not_p = p.negate();
             if props.contains(&not_p) {
-                mutexes.insert(btreeset!{p.clone(), not_p.clone()});
+                mutexes.insert(UniquePair::new(p.clone(), not_p.clone()));
             }
         }
 
@@ -314,23 +340,20 @@ impl Layer {
         // - If there is no difference then the props are mutex
         if let Some(mx_actions) = mutex_actions {
             let prop_vec: Vec<Proposition> = props.into_iter().collect();
-            for (p1, p2) in pairs(prop_vec) {
+            for UniquePair(p1, p2) in pairs(prop_vec) {
                 let viable_acts: Vec<Action> = actions.clone()
                     .into_iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
                     .collect();
 
-                let viable_act_pairs: HashSet<BTreeSet<Action>> = pairs(viable_acts)
-                    .into_iter()
-                    .map(|(a1, a2)| btreeset!{a1, a2})
-                    .collect();
+                let viable_act_pairs: HashSet<UniquePair<Action>> = pairs(viable_acts).into_iter().collect();
 
                 let diff: HashSet<_> = viable_act_pairs
                     .difference(&mx_actions)
                     .collect();
 
                 if diff.is_empty() && !mx_actions.is_empty() {
-                    mutexes.insert(btreeset!{p1.clone(), p2.clone()});
+                    mutexes.insert(UniquePair::new(p1.clone(), p2.clone()));
                 }
             }
         }
@@ -360,8 +383,8 @@ fn proposition_mutexes_due_to_negation() {
     let actions = hashset!{};
     let action_mutexes = MutexPairs::new();
     let expected = hashset!{
-        btreeset!{Proposition::from_str("caffeinated"),
-                  Proposition::from_str("caffeinated").negate()}
+        UniquePair::new(Proposition::from_str("caffeinated"),
+                        Proposition::from_str("caffeinated").negate())
     };
 
     assert_eq!(
@@ -382,7 +405,7 @@ fn proposition_mutexes_due_to_mutex_actions() {
     };
     let actions = hashset!{};
     let action_mutexes = hashset!{
-        btreeset!{
+        UniquePair::new(
             Action::new(
                 "drink coffee",
                 hashset!{Proposition::from_str("coffee")},
@@ -394,11 +417,11 @@ fn proposition_mutexes_due_to_mutex_actions() {
                 hashset!{},
                 hashset!{Proposition::from_str("coffee")},
             ),
-        }
+        )
     };
     let expected = hashset!{
-        btreeset!{Proposition::from_str("caffeinated"),
-                  Proposition::from_str("coffee")}
+        UniquePair::new(Proposition::from_str("caffeinated"),
+                   Proposition::from_str("coffee"))
     };
     assert_eq!(
         expected,
