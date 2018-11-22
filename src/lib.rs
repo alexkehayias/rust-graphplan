@@ -38,37 +38,6 @@ macro_rules! hashset {
     };
 }
 
-#[macro_export]
-/// Create a **BTreeSet** from a list of elements. Implementation
-/// copied from the maplit library https://github.com/bluss/maplit
-///
-/// ## Example
-///
-/// ```
-/// #[macro_use] extern crate graphplan;
-/// # fn main() {
-///
-/// let set = btreeset!{"a", "b"};
-/// assert!(set.contains("a"));
-/// assert!(set.contains("b"));
-/// assert!(!set.contains("c"));
-/// # }
-/// ```
-macro_rules! btreeset {
-    ($($key:expr,)+) => (btreeset!($($key),+));
-
-    ( $($key:expr),* ) => {
-        {
-            let mut _set = ::std::collections::BTreeSet::new();
-            $(
-                _set.insert($key);
-            )*
-                _set
-        }
-    };
-}
-
-
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone)]
 pub struct Proposition {
     name: &'static str,
@@ -315,22 +284,33 @@ impl Layer {
     pub fn action_mutexes(actions: HashSet<Action>,
                           mutex_props: Option<MutexPairs<Proposition>>)
                           -> MutexPairs<Action> {
-        let mutexes = MutexPairs::new();
+        let mut mutexes = MutexPairs::new();
         let action_vec: Vec<Action> = actions.into_iter().collect();
+        // TODO maybe pairs can take any Iterable instead
         let action_pairs = pairs(action_vec);
 
         for PairSet(a1, a2) in action_pairs {
-            // TODO Inconsistent effects: The effect of one action is the
+            // Inconsistent effects: The effect of one action is the
             // negation of another
-            // - Negate the effects of one of the actions then check the overlap
-            // - If there is any overlap the two actions are mutex
+            // - Negate the effects of one of the actions then check
+            //   the overlap
+            // - If there is any overlap the two actions
+            //   are mutex
+            let neg_effects: HashSet<Proposition> = a1.effects
+                .iter()
+                .map(|e| e.negate())
+                .collect();
+            let intersect: HashSet<Proposition> = a2.effects
+                .intersection(&neg_effects)
+                .map(|i| i.to_owned())
+                .collect();
+            if !intersect.is_empty() {
+                mutexes.insert(PairSet(a1, a2));
+            }
 
             // TODO Interference: One action deletes the precondition of
             // another action (they can't be done in parallel then)
         }
-
-
-
 
 
         // TODO Competing needs: Another action has precondition that
@@ -457,15 +437,26 @@ fn proposition_mutexes_due_to_mutex_actions() {
 }
 
 #[test]
-fn action_mutexes() {
-    let actions = hashset!{
-        Action::new("drink coffee",
-                    hashset!{},
-                    hashset!{})
-    };
+fn action_mutexes_due_to_inconsistent_effects() {
+    let a1 = Action::new(
+        "drink coffee",
+        hashset!{},
+        hashset!{Proposition::from_str("coffee").negate()}
+    );
+
+    let a2 = Action::new(
+        "make coffee",
+        hashset!{},
+        hashset!{Proposition::from_str("coffee")}
+    );
+    let actions = hashset!{a1.clone(), a2.clone()};
     let props = MutexPairs::new();
-    let expected = MutexPairs::new();
-    assert_eq!(expected, Layer::action_mutexes(actions, Some(props)));
+    let actual = Layer::action_mutexes(actions, Some(props));
+
+    let mut expected = MutexPairs::new();
+    expected.insert(PairSet(a1, a2));
+
+    assert_eq!(expected, actual);
 }
 
 pub struct PlanGraph {
