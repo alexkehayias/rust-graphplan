@@ -33,7 +33,7 @@ macro_rules! hashset {
             $(
                 let _ = _set.insert($key);
             )*
-            _set
+                _set
         }
     };
 }
@@ -63,13 +63,13 @@ macro_rules! btreeset {
             $(
                 _set.insert($key);
             )*
-            _set
+                _set
         }
     };
 }
 
 
-#[derive(Eq, PartialEq, Clone, Ord, PartialOrd)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Clone)]
 pub struct Proposition {
     name: &'static str,
     negation: bool,
@@ -174,33 +174,60 @@ pub enum Layer {
     PropositionLayer(PropositionLayerData),
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-/// A two element tuple that, when constructed via `new`, guarantees that
-/// (a, b) == (b, a)
-pub struct UniquePair<T: Ord + PartialEq + Eq>(T, T);
+#[derive(Debug, PartialOrd, Eq, Ord, Clone)]
+/// An unordered two element tuple that, when constructed via `new`,
+/// guarantees that (a, b) == (b, a)
+pub struct PairSet<T: Ord + PartialEq + Eq + Clone>(T, T);
 
-impl <T> UniquePair<T> where T: Ord + PartialEq + Eq{
-    /// Constructs a UniquePair, insertion order is guaranteed so UniquePair p1, p2
-    /// is equivalent UniquePair p2, p1
-    fn new(item1: T, item2: T) -> UniquePair<T> {
-        // Can't think of a more elegant way to do this so since n is 2 can
-        // just stick this in a conditional
-        if item1 < item2 {
-            UniquePair(item1, item2)
+impl <T> Hash for PairSet<T> where T: Hash + Ord + Clone{
+    fn hash<H>(&self, state: &mut H) where H: Hasher {
+        if self.0 < self.1 {
+            self.0.hash(state);
+            self.1.hash(state);
         } else {
-            UniquePair(item2, item1)
+            self.1.hash(state);
+            self.0.hash(state);
         }
+    }
+}
+
+impl <T> PartialEq for PairSet<T> where T: Ord + Clone{
+    fn eq(&self, other: &PairSet<T>) -> bool {
+        let left;
+        if &self.0 < &self.1 {
+            left = (self.0.clone(), self.1.clone());
+        } else {
+            left = (self.1.clone(), self.0.clone());
+        }
+
+        let right;
+        if &other.0 < &other.1 {
+            right = (other.0.clone(), other.1.clone());
+        } else {
+            right = (other.1.clone(), other.0.clone());
+        }
+
+        left == right
     }
 }
 
 #[test]
 fn uniq_pair_test() {
-    assert_eq!(UniquePair::<&'static str>::new("test1", "test2"),
-               UniquePair::<&'static str>::new("test2", "test1"));
+    assert_eq!(
+        PairSet::<&'static str>("test1", "test2"),
+        PairSet::<&'static str>("test2", "test1"),
+        "Order should not matter"
+    );
+
+    assert!(
+        !hashset!{PairSet::<&'static str>("test1", "test2")}
+        .insert(PairSet::<&'static str>("test2", "test1")),
+        "Hashed value should be the same regardless of order"
+    )
 }
 
 /// Returns the pairs of a set of items
-pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<UniquePair<T>> {
+pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<PairSet<T>> {
     let mut accum = Vec::new();
 
     // TODO maybe try to borrow this instead?
@@ -210,7 +237,7 @@ pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<UniquePair<T>> {
     for i in sorted.iter().cloned() {
         for j in sorted.iter().cloned() {
             if i != j && j > i {
-                accum.push(UniquePair::new(i.clone(), j.clone()));
+                accum.push(PairSet(i.clone(), j.clone()));
             }
         }
     }
@@ -223,14 +250,14 @@ pub fn test_pairs() {
     let p2 = Proposition::from_str("b");
     let p3 = Proposition::from_str("c");
     assert_eq!(
-        vec![UniquePair::new(p1.clone(), p2.clone()),
-             UniquePair::new(p1.clone(), p3.clone()),
-             UniquePair::new(p2.clone(), p3.clone())],
+        vec![PairSet(p1.clone(), p2.clone()),
+             PairSet(p1.clone(), p3.clone()),
+             PairSet(p2.clone(), p3.clone())],
         pairs(vec![p1.clone(), p2.clone(), p3.clone()])
     );
 }
 
-type MutexPairs<T> = HashSet<UniquePair<T>>;
+type MutexPairs<T> = HashSet<PairSet<T>>;
 
 impl Layer {
     /// Create a new layer from another. ActionLayer returns a
@@ -292,7 +319,7 @@ impl Layer {
         let action_vec: Vec<Action> = actions.into_iter().collect();
         let action_pairs = pairs(action_vec);
 
-        for UniquePair(a1, a2) in action_pairs {
+        for PairSet(a1, a2) in action_pairs {
             // TODO Inconsistent effects: The effect of one action is the
             // negation of another
             // - Negate the effects of one of the actions then check the overlap
@@ -329,7 +356,7 @@ impl Layer {
         for p in props.iter() {
             let not_p = p.negate();
             if props.contains(&not_p) {
-                mutexes.insert(UniquePair::new(p.clone(), not_p.clone()));
+                mutexes.insert(PairSet(p.clone(), not_p.clone()));
             }
         }
 
@@ -340,20 +367,20 @@ impl Layer {
         // - If there is no difference then the props are mutex
         if let Some(mx_actions) = mutex_actions {
             let prop_vec: Vec<Proposition> = props.into_iter().collect();
-            for UniquePair(p1, p2) in pairs(prop_vec) {
+            for PairSet(p1, p2) in pairs(prop_vec) {
                 let viable_acts: Vec<Action> = actions.clone()
                     .into_iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
                     .collect();
 
-                let viable_act_pairs: HashSet<UniquePair<Action>> = pairs(viable_acts).into_iter().collect();
+                let viable_act_pairs: HashSet<PairSet<Action>> = pairs(viable_acts).into_iter().collect();
 
                 let diff: HashSet<_> = viable_act_pairs
                     .difference(&mx_actions)
                     .collect();
 
                 if diff.is_empty() && !mx_actions.is_empty() {
-                    mutexes.insert(UniquePair::new(p1.clone(), p2.clone()));
+                    mutexes.insert(PairSet(p1.clone(), p2.clone()));
                 }
             }
         }
@@ -383,8 +410,8 @@ fn proposition_mutexes_due_to_negation() {
     let actions = hashset!{};
     let action_mutexes = MutexPairs::new();
     let expected = hashset!{
-        UniquePair::new(Proposition::from_str("caffeinated"),
-                        Proposition::from_str("caffeinated").negate())
+        PairSet(Proposition::from_str("caffeinated"),
+                Proposition::from_str("caffeinated").negate())
     };
 
     assert_eq!(
@@ -405,7 +432,7 @@ fn proposition_mutexes_due_to_mutex_actions() {
     };
     let actions = hashset!{};
     let action_mutexes = hashset!{
-        UniquePair::new(
+        PairSet(
             Action::new(
                 "drink coffee",
                 hashset!{Proposition::from_str("coffee")},
@@ -420,8 +447,8 @@ fn proposition_mutexes_due_to_mutex_actions() {
         )
     };
     let expected = hashset!{
-        UniquePair::new(Proposition::from_str("caffeinated"),
-                   Proposition::from_str("coffee"))
+        PairSet(Proposition::from_str("caffeinated"),
+                Proposition::from_str("coffee"))
     };
     assert_eq!(
         expected,
