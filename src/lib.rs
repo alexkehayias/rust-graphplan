@@ -213,6 +213,27 @@ pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<PairSet<T>> {
     accum
 }
 
+/// Returns the pairs of a set of items
+pub fn pairs_from_sets<T: Eq + Hash + Clone + Ord>(items1: Vec<T>, items2: Vec<T>)
+                                                   -> Vec<PairSet<T>> {
+    let mut accum = Vec::new();
+
+    let mut sorted1 = items1.clone();
+    sorted1.sort();
+
+    let mut sorted2 = items2.clone();
+    sorted2.sort();
+
+    for i in sorted1.iter().cloned() {
+        for j in sorted2.iter().cloned() {
+            if i != j && j > i {
+                accum.push(PairSet(i.clone(), j.clone()));
+            }
+        }
+    }
+    accum
+}
+
 #[test]
 pub fn test_pairs() {
     let p1 = Proposition::from_str("a");
@@ -296,26 +317,74 @@ impl Layer {
             //   the overlap
             // - If there is any overlap the two actions
             //   are mutex
-            let neg_effects: HashSet<Proposition> = a1.effects
+            let negated_fx: HashSet<Proposition> = a1.effects
                 .iter()
                 .map(|e| e.negate())
                 .collect();
-            let intersect: HashSet<Proposition> = a2.effects
-                .intersection(&neg_effects)
+            let inconsistent_fx: HashSet<Proposition> = a2.effects
+                .intersection(&negated_fx)
                 .map(|i| i.to_owned())
                 .collect();
-            if !intersect.is_empty() {
-                mutexes.insert(PairSet(a1, a2));
+            if !inconsistent_fx.is_empty() {
+                mutexes.insert(PairSet(a1.clone(), a2.clone()));
+                continue
             }
 
-            // TODO Interference: One action deletes the precondition of
+            // Interference: One action deletes the precondition of
             // another action (they can't be done in parallel then)
+            let left_interference: HashSet<Proposition> = a2.reqs
+                .intersection(&negated_fx)
+                .map(|i| i.to_owned())
+                .collect();
+
+            if !left_interference.is_empty() {
+                mutexes.insert(PairSet(a1.clone(), a2.clone()));
+                continue
+            }
+
+            // Since actions are not symetrical (they may have different
+            // reqs) we need to check if the right hand side action
+            // interferes with left hand side too
+            let right_negated_fx: HashSet<Proposition> = a2.clone().effects
+                .iter()
+                .map(|e| e.negate())
+                .collect();
+            let right_interference: HashSet<Proposition> = a1.clone().reqs
+                .intersection(&right_negated_fx)
+                .map(|i| i.to_owned())
+                .collect();
+
+            if !right_interference.is_empty() {
+                mutexes.insert(PairSet(a1.clone(), a2.clone()));
+                continue
+            }
+
+            // Competing needs: Action has precondition that is
+            // mutex
+            // - Generate pairs of Action.reqs and compare them
+            //   to proposition mutees
+            // - Check for intersection with mutex props
+            if let Some(mx_props) = mutex_props.clone() {
+                let a1_req_vec: Vec<Proposition> = a1.clone().reqs
+                    .into_iter()
+                    .collect();
+                let a2_req_vec: Vec<Proposition> = a2.clone().reqs
+                    .into_iter()
+                    .collect();
+                let req_pairs = pairs_from_sets(a1_req_vec, a2_req_vec);
+                let req_pair_set:HashSet<PairSet<Proposition>> = req_pairs
+                    .into_iter()
+                    .collect();
+                let competing_needs: HashSet<PairSet<Proposition>> = req_pair_set
+                    .intersection(&mx_props)
+                    .map(|i| i.to_owned())
+                    .collect();
+
+                if !competing_needs.is_empty() {
+                    mutexes.insert(PairSet(a1.clone(), a2.clone()));
+                }
+            }
         }
-
-
-        // TODO Competing needs: Another action has precondition that
-        // is mutex
-
         mutexes
     }
 
@@ -437,7 +506,7 @@ fn proposition_mutexes_due_to_mutex_actions() {
 }
 
 #[test]
-fn action_mutexes_due_to_inconsistent_effects() {
+fn action_mutexes_due_to_inconsistent_fx() {
     let a1 = Action::new(
         "drink coffee",
         hashset!{},
@@ -452,6 +521,58 @@ fn action_mutexes_due_to_inconsistent_effects() {
     let actions = hashset!{a1.clone(), a2.clone()};
     let props = MutexPairs::new();
     let actual = Layer::action_mutexes(actions, Some(props));
+
+    let mut expected = MutexPairs::new();
+    expected.insert(PairSet(a1, a2));
+
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn action_mutexes_due_to_interference() {
+    let a1 = Action::new(
+        "eat sandwich",
+        hashset!{Proposition::from_str("hungry")},
+        hashset!{Proposition::from_str("hungry").negate()}
+    );
+
+    let a2 = Action::new(
+        "eat soup",
+        hashset!{Proposition::from_str("hungry")},
+        hashset!{Proposition::from_str("hungry").negate()}
+    );
+    let actions = hashset!{a1.clone(), a2.clone()};
+    let props = MutexPairs::new();
+    let actual = Layer::action_mutexes(actions, Some(props));
+
+    let mut expected = MutexPairs::new();
+    expected.insert(PairSet(a1, a2));
+
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn action_mutexes_due_to_competing_needs() {
+    let a1 = Action::new(
+        "eat sandwich",
+        hashset!{Proposition::from_str("hungry")},
+        hashset!{Proposition::from_str("hungry").negate()}
+    );
+
+    let a2 = Action::new(
+        "eat soup",
+        hashset!{Proposition::from_str("hungry")},
+        hashset!{Proposition::from_str("hungry").negate()}
+    );
+    let actions = hashset!{a1.clone(), a2.clone()};
+    let mut mutex_props = MutexPairs::new();
+    mutex_props.insert(
+        PairSet(
+            Proposition::from_str("hungry"),
+            Proposition::from_str("hungry").negate()
+        )
+    );
+    let actual = Layer::action_mutexes(actions, Some(mutex_props));
 
     let mut expected = MutexPairs::new();
     expected.insert(PairSet(a1, a2));
