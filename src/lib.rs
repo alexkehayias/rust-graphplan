@@ -1,4 +1,3 @@
-#![crate_name = "graphplan"]
 use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::fmt;
@@ -71,32 +70,53 @@ impl Proposition {
     }
 }
 
-#[test]
-fn propositions_can_be_negated() {
-    // Sanity check
-    assert_eq!(Proposition::from_str("test"), Proposition::from_str("test"));
-    let p1 = Proposition::from_str("test");
-    {
-        assert!(false == p1.negation);
+#[cfg(test)]
+mod proposition_test {
+    use super::*;
+
+    #[test]
+    fn propositions_can_be_negated() {
+        // Sanity check
+        assert_eq!(Proposition::from_str("test"), Proposition::from_str("test"));
+        let p1 = Proposition::from_str("test");
+        {
+            assert!(false == p1.negation);
+        }
+
+        assert!(true == Proposition::from_str("test").negate().negation);
+
+        let p2 = Proposition::from_str("test").negate();
+        {
+            assert!(
+                p2.is_negation(&p1),
+                format!("{:?} is not a negation of {:?}", p1, p2)
+            );
+        }
+        {
+            assert!(p1.is_negation(&p2));
+        }
     }
 
-    assert!(true == Proposition::from_str("test").negate().negation);
+    #[test]
+    fn proposition_hashing_works() {
+        let set = hashset!{Proposition::from_str("caffeinated")};
+        assert!(set.contains(&Proposition::from_str("caffeinated")));
 
-    let p2 = Proposition::from_str("test").negate();
-    {
-        assert!(
-            p2.is_negation(&p1),
-            format!("{:?} is not a negation of {:?}", p1, p2)
-        );
+        let set = hashset!{Proposition::from_str("caffeinated").negate()};
+        assert!(set.contains(&Proposition::from_str("caffeinated").negate()));
+
+        let set = hashset!{Proposition::from_str("caffeinated").negate()};
+        assert!(!set.contains(&Proposition::from_str("caffeinated")));
     }
-    {
-        assert!(p1.is_negation(&p2));
-    }
+
 }
+
 
 #[derive(Eq, PartialEq, Clone)]
 pub struct Action {
-    name: &'static str,
+    // TODO switch to String since we need to dynamically generate
+    // names for maintenance actions
+    name: String,
     reqs: HashSet<Proposition>,
     effects: HashSet<Proposition>,
 }
@@ -129,7 +149,7 @@ impl PartialOrd for Action {
 }
 
 impl Action {
-    pub fn new(name: &'static str, reqs: HashSet<Proposition>, effects: HashSet<Proposition>) -> Action {
+    pub fn new(name: String, reqs: HashSet<Proposition>, effects: HashSet<Proposition>) -> Action {
         Action {name: name, reqs: reqs, effects: effects}
     }
 }
@@ -180,19 +200,24 @@ impl <T> PartialEq for PairSet<T> where T: Ord + Clone{
     }
 }
 
-#[test]
-fn uniq_pair_test() {
-    assert_eq!(
-        PairSet::<&'static str>("test1", "test2"),
-        PairSet::<&'static str>("test2", "test1"),
-        "Order should not matter"
-    );
+#[cfg(test)]
+mod pair_set_test {
+    use super::*;
 
-    assert!(
-        !hashset!{PairSet::<&'static str>("test1", "test2")}
-        .insert(PairSet::<&'static str>("test2", "test1")),
-        "Hashed value should be the same regardless of order"
-    )
+    #[test]
+    fn pairset() {
+        assert_eq!(
+            PairSet::<&'static str>("test1", "test2"),
+            PairSet::<&'static str>("test2", "test1"),
+            "Order should not matter"
+        );
+
+        assert!(
+            !hashset!{PairSet::<&'static str>("test1", "test2")}
+            .insert(PairSet::<&'static str>("test2", "test1")),
+            "Hashed value should be the same regardless of order"
+        )
+    }
 }
 
 /// Returns the pairs of a set of items
@@ -234,17 +259,28 @@ pub fn pairs_from_sets<T: Eq + Hash + Clone + Ord>(items1: Vec<T>, items2: Vec<T
     accum
 }
 
-#[test]
-pub fn test_pairs() {
-    let p1 = Proposition::from_str("a");
-    let p2 = Proposition::from_str("b");
-    let p3 = Proposition::from_str("c");
-    assert_eq!(
-        vec![PairSet(p1.clone(), p2.clone()),
-             PairSet(p1.clone(), p3.clone()),
-             PairSet(p2.clone(), p3.clone())],
-        pairs(vec![p1.clone(), p2.clone(), p3.clone()])
-    );
+#[cfg(test)]
+mod pairs_test {
+    use super::*;
+
+    #[test]
+    fn yields_unique_pairs_only() {
+        let p1 = Proposition::from_str("a");
+        let p2 = Proposition::from_str("b");
+        let p3 = Proposition::from_str("c");
+        assert_eq!(
+            vec![PairSet(p1.clone(), p2.clone()),
+                 PairSet(p1.clone(), p3.clone()),
+                 PairSet(p2.clone(), p3.clone())],
+            pairs(vec![p1.clone(), p2.clone(), p3.clone()])
+        );
+    }
+
+    #[test]
+    fn yields_unique_pairs_from_sets() {
+        assert_eq!(pairs_from_sets(vec!{1, 2}, vec!{3}),
+                   vec!{PairSet(1, 3), PairSet(2, 3)})
+    }
 }
 
 type MutexPairs<T> = HashSet<PairSet<T>>;
@@ -260,7 +296,7 @@ impl Layer {
     /// Layer::from_layer(hashset![], Option::None, prop_layer);
     /// ```
     pub fn from_layer(all_actions: HashSet<Action>,
-                      prev_layer: Option<Layer>,
+                      _prev_layer: Option<Layer>,
                       layer: Layer)
                       -> Layer {
         match &layer {
@@ -269,18 +305,6 @@ impl Layer {
                 for a in actions {
                     for e in a.effects.iter() {
                         effects.insert(e.clone());
-                    }
-                }
-
-                // Add in maintenance action effects for initial props
-                if let Some(prop_layer) = prev_layer {
-                    match prop_layer {
-                        Layer::ActionLayer(_) => (),
-                        Layer::PropositionLayer(props) => {
-                            for p in props.iter() {
-                                effects.insert(p.clone());
-                            }
-                        }
                     }
                 }
 
@@ -296,6 +320,18 @@ impl Layer {
                             al.insert(a);
                         }
                     }
+                }
+
+                // Add in maintenance actions for all props
+                for p in props {
+                    let action_name = format!("[maintain] {}", p.name);
+                    al.insert(
+                        Action::new(
+                            action_name,
+                            hashset!{p.clone()},
+                            hashset!{p.clone()},
+                        )
+                    );
                 }
                 Layer::ActionLayer(al)
             },
@@ -437,147 +473,165 @@ impl Layer {
     }
 }
 
-#[test]
-fn proposition_hashing_works() {
-    let set = hashset!{Proposition::from_str("caffeinated")};
-    assert!(set.contains(&Proposition::from_str("caffeinated")));
+#[cfg(test)]
+mod from_layer_test {
+    use super::*;
 
-    let set = hashset!{Proposition::from_str("caffeinated").negate()};
-    assert!(set.contains(&Proposition::from_str("caffeinated").negate()));
-
-    let set = hashset!{Proposition::from_str("caffeinated").negate()};
-    assert!(!set.contains(&Proposition::from_str("caffeinated")));
+    #[test]
+    fn action_layer_from_proposition_layer() {
+        let prop = Proposition::from_str("test");
+        let actual = Layer::from_layer(
+            hashset!{},
+            Option::None,
+            Layer::PropositionLayer(hashset!{prop.clone()})
+        );
+        let expected = Layer::ActionLayer(
+            hashset!{
+                Action::new(
+                    String::from("[maintain] test"),
+                    hashset!{prop.clone()},
+                    hashset!{prop.clone()}
+                )
+            }
+        );
+        assert_eq!(expected, actual);
+    }
 }
 
-#[test]
-fn proposition_mutexes_due_to_negation() {
-    let props = hashset!{
-        Proposition::from_str("caffeinated"),
-        Proposition::from_str("caffeinated").negate(),
-        Proposition::from_str("tired"),
-    };
-    let actions = hashset!{};
-    let action_mutexes = MutexPairs::new();
-    let expected = hashset!{
-        PairSet(Proposition::from_str("caffeinated"),
-                Proposition::from_str("caffeinated").negate())
-    };
+#[cfg(test)]
+mod mutex_test {
+    use super::*;
 
-    assert_eq!(
-        expected,
-        Layer::proposition_mutexes(
-            props,
-            actions,
-            Some(action_mutexes)
-        )
-    );
-}
+    #[test]
+    fn proposition_mutexes_due_to_negation() {
+        let props = hashset!{
+            Proposition::from_str("caffeinated"),
+            Proposition::from_str("caffeinated").negate(),
+            Proposition::from_str("tired"),
+        };
+        let actions = hashset!{};
+        let action_mutexes = MutexPairs::new();
+        let expected = hashset!{
+            PairSet(Proposition::from_str("caffeinated"),
+                    Proposition::from_str("caffeinated").negate())
+        };
 
-#[test]
-fn proposition_mutexes_due_to_mutex_actions() {
-    let props = hashset!{
-        Proposition::from_str("caffeinated"),
-        Proposition::from_str("coffee"),
-    };
-    let actions = hashset!{};
-    let action_mutexes = hashset!{
-        PairSet(
-            Action::new(
-                "drink coffee",
-                hashset!{Proposition::from_str("coffee")},
-                hashset!{Proposition::from_str("caffeinated"),
-                         Proposition::from_str("coffee").negate()},
-            ),
-            Action::new(
-                "make coffee",
-                hashset!{},
-                hashset!{Proposition::from_str("coffee")},
-            ),
-        )
-    };
-    let expected = hashset!{
-        PairSet(Proposition::from_str("caffeinated"),
-                Proposition::from_str("coffee"))
-    };
-    assert_eq!(
-        expected,
-        Layer::proposition_mutexes(props, actions, Some(action_mutexes))
-    );
-}
+        assert_eq!(
+            expected,
+            Layer::proposition_mutexes(
+                props,
+                actions,
+                Some(action_mutexes)
+            )
+        );
+    }
 
-#[test]
-fn action_mutexes_due_to_inconsistent_fx() {
-    let a1 = Action::new(
-        "drink coffee",
-        hashset!{},
-        hashset!{Proposition::from_str("coffee").negate()}
-    );
+    #[test]
+    fn proposition_mutexes_due_to_mutex_actions() {
+        let props = hashset!{
+            Proposition::from_str("caffeinated"),
+            Proposition::from_str("coffee"),
+        };
+        let actions = hashset!{};
+        let action_mutexes = hashset!{
+            PairSet(
+                Action::new(
+                    String::from("drink coffee"),
+                    hashset!{Proposition::from_str("coffee")},
+                    hashset!{Proposition::from_str("caffeinated"),
+                             Proposition::from_str("coffee").negate()},
+                ),
+                Action::new(
+                    String::from("make coffee"),
+                    hashset!{},
+                    hashset!{Proposition::from_str("coffee")},
+                ),
+            )
+        };
+        let expected = hashset!{
+            PairSet(Proposition::from_str("caffeinated"),
+                    Proposition::from_str("coffee"))
+        };
+        assert_eq!(
+            expected,
+            Layer::proposition_mutexes(props, actions, Some(action_mutexes))
+        );
+    }
 
-    let a2 = Action::new(
-        "make coffee",
-        hashset!{},
-        hashset!{Proposition::from_str("coffee")}
-    );
-    let actions = hashset!{a1.clone(), a2.clone()};
-    let props = MutexPairs::new();
-    let actual = Layer::action_mutexes(actions, Some(props));
+    #[test]
+    fn action_mutexes_due_to_inconsistent_fx() {
+        let a1 = Action::new(
+            String::from("drink coffee"),
+            hashset!{},
+            hashset!{Proposition::from_str("coffee").negate()}
+        );
 
-    let mut expected = MutexPairs::new();
-    expected.insert(PairSet(a1, a2));
+        let a2 = Action::new(
+            String::from("make coffee"),
+            hashset!{},
+            hashset!{Proposition::from_str("coffee")}
+        );
+        let actions = hashset!{a1.clone(), a2.clone()};
+        let props = MutexPairs::new();
+        let actual = Layer::action_mutexes(actions, Some(props));
 
-    assert_eq!(expected, actual);
-}
+        let mut expected = MutexPairs::new();
+        expected.insert(PairSet(a1, a2));
 
-#[test]
-fn action_mutexes_due_to_interference() {
-    let a1 = Action::new(
-        "eat sandwich",
-        hashset!{Proposition::from_str("hungry")},
-        hashset!{Proposition::from_str("hungry").negate()}
-    );
+        assert_eq!(expected, actual);
+    }
 
-    let a2 = Action::new(
-        "eat soup",
-        hashset!{Proposition::from_str("hungry")},
-        hashset!{Proposition::from_str("hungry").negate()}
-    );
-    let actions = hashset!{a1.clone(), a2.clone()};
-    let props = MutexPairs::new();
-    let actual = Layer::action_mutexes(actions, Some(props));
+    #[test]
+    fn action_mutexes_due_to_interference() {
+        let a1 = Action::new(
+            String::from("eat sandwich"),
+            hashset!{Proposition::from_str("hungry")},
+            hashset!{Proposition::from_str("hungry").negate()}
+        );
 
-    let mut expected = MutexPairs::new();
-    expected.insert(PairSet(a1, a2));
+        let a2 = Action::new(
+            String::from("eat soup"),
+            hashset!{Proposition::from_str("hungry")},
+            hashset!{Proposition::from_str("hungry").negate()}
+        );
+        let actions = hashset!{a1.clone(), a2.clone()};
+        let props = MutexPairs::new();
+        let actual = Layer::action_mutexes(actions, Some(props));
 
-    assert_eq!(expected, actual);
-}
+        let mut expected = MutexPairs::new();
+        expected.insert(PairSet(a1, a2));
 
-#[test]
-fn action_mutexes_due_to_competing_needs() {
-    let a1 = Action::new(
-        "eat sandwich",
-        hashset!{Proposition::from_str("hungry")},
-        hashset!{Proposition::from_str("hungry").negate()}
-    );
+        assert_eq!(expected, actual);
+    }
 
-    let a2 = Action::new(
-        "eat soup",
-        hashset!{Proposition::from_str("hungry")},
-        hashset!{Proposition::from_str("hungry").negate()}
-    );
-    let actions = hashset!{a1.clone(), a2.clone()};
-    let mut mutex_props = MutexPairs::new();
-    mutex_props.insert(
-        PairSet(
-            Proposition::from_str("hungry"),
-            Proposition::from_str("hungry").negate()
-        )
-    );
-    let actual = Layer::action_mutexes(actions, Some(mutex_props));
+    #[test]
+    fn action_mutexes_due_to_competing_needs() {
+        let a1 = Action::new(
+            String::from("eat sandwich"),
+            hashset!{Proposition::from_str("hungry")},
+            hashset!{Proposition::from_str("hungry").negate()}
+        );
 
-    let mut expected = MutexPairs::new();
-    expected.insert(PairSet(a1, a2));
+        let a2 = Action::new(
+            String::from("eat soup"),
+            hashset!{Proposition::from_str("hungry")},
+            hashset!{Proposition::from_str("hungry").negate()}
+        );
+        let actions = hashset!{a1.clone(), a2.clone()};
+        let mut mutex_props = MutexPairs::new();
+        mutex_props.insert(
+            PairSet(
+                Proposition::from_str("hungry"),
+                Proposition::from_str("hungry").negate()
+            )
+        );
+        let actual = Layer::action_mutexes(actions, Some(mutex_props));
 
-    assert_eq!(expected, actual);
+        let mut expected = MutexPairs::new();
+        expected.insert(PairSet(a1, a2));
+
+        assert_eq!(expected, actual);
+    }
 }
 
 pub struct PlanGraph {
@@ -596,60 +650,63 @@ impl PlanGraph {
     }
 }
 
-#[test]
-fn integration() {
-    let mut pg = PlanGraph::new();
-    let p1 = Proposition::from_str("tired");
-    let p2 = Proposition::from_str("dog needs to pee");
-    let p3 = Proposition::from_str("caffeinated");
+#[cfg(test)]
+mod integration_test {
+    use super::*;
 
-    let a1 = Action::new(
-        "coffee",
-        hashset!{p1.clone()},
-        hashset!{p3.clone()}
-    );
+    #[test]
+    fn integration() {
+        let mut pg = PlanGraph::new();
+        let p1 = Proposition::from_str("tired");
+        let p2 = Proposition::from_str("dog needs to pee");
+        let p3 = Proposition::from_str("caffeinated");
 
-    let a2 = Action::new(
-        "walk dog",
-        hashset!{p2.clone(), p3.clone()},
-        hashset!{p2.clone().negate()},
-    );
+        let a1 = Action::new(
+            String::from("coffee"),
+            hashset!{p1.clone()},
+            hashset!{p3.clone()}
+        );
 
-    let all_actions = hashset!{a1.clone(), a2.clone()};
+        let a2 = Action::new(
+            String::from("walk dog"),
+            hashset!{p2.clone(), p3.clone()},
+            hashset!{p2.clone().negate()},
+        );
 
-    let props = hashset!{p1.clone(), p2.clone()};
-    let prop_l1 = Layer::PropositionLayer(props.clone());
-    // let mutex_props_l1 = Layer::proposition_mutexes(
-    //     vec![],
-    //     props.clone()
-    // );
+        let all_actions = hashset!{a1.clone(), a2.clone()};
 
-    // Generate the action layer
-    let action_l1 = Layer::from_layer(
-        all_actions.clone(),
-        Option::None,
-        prop_l1.clone()
-    );
-    let expected_action_l1 = Layer::ActionLayer(hashset!{a1.clone()});
-    assert!(expected_action_l1 == action_l1,
-            format!("{:?} != {:?}", expected_action_l1, action_l1));
+        let props = hashset!{p1.clone(), p2.clone()};
+        let prop_l1 = Layer::PropositionLayer(props.clone());
+        // let mutex_props_l1 = Layer::proposition_mutexes(
+        //     vec![],
+        //     props.clone()
+        // );
 
-    // Generate the next proposition layer
-    let prop_l2 = Layer::from_layer(
-        all_actions.clone(),
-        Some(prop_l1.clone()),
-        action_l1.clone()
-    );
-    let expected_prop_l2 = Layer::PropositionLayer(
-        hashset![p1.clone(), p2.clone(), p3.clone()]
-    );
-    assert!(expected_prop_l2 == prop_l2,
-            format!("{:?} != {:?}", expected_prop_l2, prop_l2));
+        // Generate the action layer
+        let action_l1 = Layer::from_layer(
+            all_actions.clone(),
+            Option::None,
+            prop_l1.clone()
+        );
+        let expected_action_l1 = Layer::ActionLayer(hashset!{a1.clone()});
 
-    // Insert the layers
-    pg.push(prop_l1);
-    pg.push(action_l1);
-    pg.push(prop_l2);
+        // Generate the next proposition layer
+        let prop_l2 = Layer::from_layer(
+            all_actions.clone(),
+            Some(prop_l1.clone()),
+            action_l1.clone()
+        );
+        let expected_prop_l2 = Layer::PropositionLayer(
+            hashset![p1.clone(), p2.clone(), p3.clone()]
+        );
+        assert!(expected_prop_l2 == prop_l2,
+                format!("{:?} != {:?}", expected_prop_l2, prop_l2));
 
-    assert!(pg.layers.len() == 3);
+        // Insert the layers
+        pg.push(prop_l1);
+        pg.push(action_l1);
+        pg.push(prop_l2);
+
+        assert!(pg.layers.len() == 3);
+    }
 }
