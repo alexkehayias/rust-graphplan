@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::iter::FromIterator;
 use std::fmt;
 use std::cmp::{Ordering};
@@ -58,7 +58,7 @@ impl Hash for Proposition {
 
 impl Proposition {
     pub fn from_str(name: &'static str) -> Proposition {
-        Proposition {name: name, negation: false}
+        Proposition {name, negation: false}
     }
 
     pub fn negate(&self) -> Proposition {
@@ -114,8 +114,6 @@ mod proposition_test {
 
 #[derive(Eq, PartialEq, Clone)]
 pub struct Action {
-    // TODO switch to String since we need to dynamically generate
-    // names for maintenance actions
     name: String,
     reqs: HashSet<Proposition>,
     effects: HashSet<Proposition>,
@@ -150,7 +148,7 @@ impl PartialOrd for Action {
 
 impl Action {
     pub fn new(name: String, reqs: HashSet<Proposition>, effects: HashSet<Proposition>) -> Action {
-        Action {name: name, reqs: reqs, effects: effects}
+        Action {name, reqs, effects}
     }
 }
 
@@ -164,8 +162,7 @@ pub enum Layer {
 }
 
 #[derive(Debug, PartialOrd, Eq, Ord, Clone)]
-/// An unordered two element tuple that, when constructed via `new`,
-/// guarantees that (a, b) == (b, a)
+/// An unordered two element tuple that such that (a, b) == (b, a)
 pub struct PairSet<T: Ord + PartialEq + Eq + Clone>(T, T);
 
 impl <T> Hash for PairSet<T> where T: Hash + Ord + Clone{
@@ -182,21 +179,7 @@ impl <T> Hash for PairSet<T> where T: Hash + Ord + Clone{
 
 impl <T> PartialEq for PairSet<T> where T: Ord + Clone{
     fn eq(&self, other: &PairSet<T>) -> bool {
-        let left;
-        if &self.0 < &self.1 {
-            left = (self.0.clone(), self.1.clone());
-        } else {
-            left = (self.1.clone(), self.0.clone());
-        }
-
-        let right;
-        if &other.0 < &other.1 {
-            right = (other.0.clone(), other.1.clone());
-        } else {
-            right = (other.1.clone(), other.0.clone());
-        }
-
-        left == right
+        &self.0 == &other.0 && &self.1 == &other.1 || &self.1 == &other.0 && &self.0 == &other.1
     }
 }
 
@@ -293,47 +276,45 @@ impl Layer {
     /// #[macro_use] extern crate graphplan;
     /// use graphplan::Layer;
     /// let prop_layer = Layer::PropositionLayer(hashset!{});
-    /// Layer::from_layer(hashset![], Option::None, prop_layer);
+    /// Layer::from_layer(hashset![], prop_layer);
     /// ```
     pub fn from_layer(all_actions: HashSet<Action>,
-                      _prev_layer: Option<Layer>,
                       layer: Layer)
                       -> Layer {
         match &layer {
             Layer::ActionLayer(actions) => {
-                let mut effects = PropositionLayerData::new();
+                let mut layer_data = PropositionLayerData::new();
                 for a in actions {
                     for e in a.effects.iter() {
-                        effects.insert(e.clone());
+                        layer_data.insert(e.clone());
                     }
                 }
 
-                Layer::PropositionLayer(effects)
+                Layer::PropositionLayer(layer_data)
             },
             Layer::PropositionLayer(props) => {
                 let props_hash = HashSet::from_iter(props.iter().cloned());
-                let mut al = ActionLayerData::new();
+                let mut layer_data = ActionLayerData::new();
                 {
                     for a in all_actions {
                         // if a has all props push it to layer
                         if a.reqs.is_subset(&props_hash) {
-                            al.insert(a);
+                            layer_data.insert(a);
                         }
                     }
                 }
 
                 // Add in maintenance actions for all props
                 for p in props {
-                    let action_name = format!("[maintain] {}", p.name);
-                    al.insert(
+                    layer_data.insert(
                         Action::new(
-                            action_name,
+                            format!("[maintain] {}", p.name),
                             hashset!{p.clone()},
                             hashset!{p.clone()},
                         )
                     );
                 }
-                Layer::ActionLayer(al)
+                Layer::ActionLayer(layer_data)
             },
         }
     }
@@ -482,7 +463,6 @@ mod from_layer_test {
         let prop = Proposition::from_str("test");
         let actual = Layer::from_layer(
             hashset!{},
-            Option::None,
             Layer::PropositionLayer(hashset!{prop.clone()})
         );
         let expected = Layer::ActionLayer(
@@ -634,19 +614,118 @@ mod mutex_test {
     }
 }
 
+type LayerNumber = usize;
+
 pub struct PlanGraph {
-    layers: Vec<Layer>
+    actions: HashSet<Action>,
+    layers: Vec<Layer>,
+    mutex_props: HashMap<LayerNumber, MutexPairs<Proposition>>,
+    mutex_actions: HashMap<LayerNumber, MutexPairs<Action>>,
 }
 
 impl PlanGraph {
-    pub fn new() -> Self {
+    pub fn new(initial_props: HashSet<Proposition>, actions: HashSet<Action>) -> Self {
+        // TODO make sure the initial props are not already mutex
         PlanGraph {
-            layers: Vec::new()
+            actions: actions,
+            layers: vec![Layer::PropositionLayer(initial_props)],
+            mutex_props: HashMap::new(),
+            mutex_actions: HashMap::new()
         }
     }
 
     pub fn push(&mut self, layer: Layer) {
         self.layers.push(layer.clone())
+    }
+
+    /// Extends the plangraph to depth i + 1
+    /// Inserts another action layer and proposition layer
+    pub fn extend(&mut self) {
+        let length = self.layers.len();
+        if let Some(layer) = self.layers.last().cloned() {
+            match layer {
+                Layer::ActionLayer(_) => {
+                    panic!("Tried to extend a plangraph from an ActionLayer which is not allowed")
+                },
+                Layer::PropositionLayer(props) => {
+                    let mutex_props = self.mutex_props.get(&(length - 1)).cloned();
+                    let action_layer = Layer::from_layer(
+                        self.actions.clone(),
+                        Layer::PropositionLayer(props)
+                    );
+                    let action_layer_actions = match action_layer.clone() {
+                        Layer::ActionLayer(action_data) => Some(action_data),
+                        _ => None
+                    };
+                    let action_mutexes = Layer::action_mutexes(
+                        action_layer_actions.clone().unwrap(),
+                        mutex_props
+                    );
+                    self.layers.push(action_layer.clone());
+                    self.mutex_actions.insert(self.layers.len(), action_mutexes.clone());
+
+                    let prop_layer = Layer::from_layer(
+                        self.actions.clone(),
+                        action_layer
+                    );
+                    let prop_layer_props = match prop_layer.clone() {
+                        Layer::PropositionLayer(prop_data) => Some(prop_data),
+                        _ => None
+                    };
+                    let prop_mutexes = Layer::proposition_mutexes(
+                        // This shouldn't fail
+                        prop_layer_props.unwrap(),
+                        // This shouldn't fail
+                        action_layer_actions.unwrap(),
+                        Some(action_mutexes)
+                    );
+                    self.layers.push(prop_layer);
+                    self.mutex_props.insert(self.layers.len(), prop_mutexes.clone());
+                }
+            }
+        } else {
+            panic!("Tried to extend a plangraph that is not initialized. Please use PlanGraph::new instead of instantiating it as a struct.")
+        }
+    }
+
+    pub fn depth(&self) -> usize {
+        if self.layers.len() > 2 {
+            (self.layers.len() - 1) / 2
+        } else {
+            0
+        }
+    }
+
+    pub fn search<T>(&self, solver: T) -> Vec<Vec<Action>> where T: GraphPlanSolver {
+        solver.search(self)
+    }
+}
+
+pub trait GraphPlanSolver {
+    fn search(&self, plangraph: &PlanGraph) -> Vec<Vec<Action>>;
+}
+
+struct SimpleSolver;
+
+impl GraphPlanSolver for SimpleSolver {
+    fn search(&self, plangraph: &PlanGraph) -> Vec<Vec<Action>> {
+
+        vec![]
+    }
+}
+
+struct GraphPlan<T: GraphPlanSolver> {
+    solver: T,
+    data: PlanGraph,
+}
+
+
+#[cfg(test)]
+mod plangraph_test {
+    use super::*;
+
+    #[test]
+    fn is_goal_satisfield () {
     }
 }
 
@@ -656,7 +735,6 @@ mod integration_test {
 
     #[test]
     fn integration() {
-        let mut pg = PlanGraph::new();
         let p1 = Proposition::from_str("tired");
         let p2 = Proposition::from_str("dog needs to pee");
         let p3 = Proposition::from_str("caffeinated");
@@ -673,40 +751,12 @@ mod integration_test {
             hashset!{p2.clone().negate()},
         );
 
-        let all_actions = hashset!{a1.clone(), a2.clone()};
+        let mut pg = PlanGraph::new(hashset!{p1.clone(), p2.clone(), p3.clone()},
+                                    hashset!{a1.clone(), a2.clone()});
 
-        let props = hashset!{p1.clone(), p2.clone()};
-        let prop_l1 = Layer::PropositionLayer(props.clone());
-        // let mutex_props_l1 = Layer::proposition_mutexes(
-        //     vec![],
-        //     props.clone()
-        // );
-
-        // Generate the action layer
-        let action_l1 = Layer::from_layer(
-            all_actions.clone(),
-            Option::None,
-            prop_l1.clone()
-        );
-        let expected_action_l1 = Layer::ActionLayer(hashset!{a1.clone()});
-
-        // Generate the next proposition layer
-        let prop_l2 = Layer::from_layer(
-            all_actions.clone(),
-            Some(prop_l1.clone()),
-            action_l1.clone()
-        );
-        let expected_prop_l2 = Layer::PropositionLayer(
-            hashset![p1.clone(), p2.clone(), p3.clone()]
-        );
-        assert!(expected_prop_l2 == prop_l2,
-                format!("{:?} != {:?}", expected_prop_l2, prop_l2));
-
-        // Insert the layers
-        pg.push(prop_l1);
-        pg.push(action_l1);
-        pg.push(prop_l2);
-
-        assert!(pg.layers.len() == 3);
+        pg.extend();
+        assert_eq!(pg.depth(), 1);
+        pg.extend();
+        assert_eq!(pg.depth(), 2);
     }
 }

@@ -3,9 +3,8 @@ name = "graphplan"
 version = "0.1.0"
 authors = ["Alex Kehayias <alex.kehayias@gmail.com>"]
 
-[dev-dependencies]
-criterion = "0.2"
+[dependencies]
 
-[[bench]]
-name = "plangraph"
-harness = false
+[lib]
+name = "graphplan"
+path = "lib.rs"
