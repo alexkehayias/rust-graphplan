@@ -23,9 +23,14 @@ fn benchmark(c: &mut Criterion) {
     );
 
     c.bench_function("plangraph 100", move |b| b.iter(||{
-        let mut pg = PlanGraph::new(hashset!{p1.clone(), p2.clone(), p3.clone()},
-                                    hashset!{a1.clone(), a2.clone()});
-        for i in (0..100) {
+        let mut pg = PlanGraph::new(
+            hashset!{p1.clone(), p2.clone(), p3.clone()},
+            hashset!{p1.clone().negate(),
+                     p2.negate().clone(),
+                     p3.clone()},
+            hashset!{a1.clone(), a2.clone()}
+        );
+        for _ in 0..100 {
             pg.extend();
         }
     }));

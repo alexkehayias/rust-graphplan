@@ -222,20 +222,21 @@ pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<PairSet<T>> {
 }
 
 /// Returns the pairs of a set of items
-pub fn pairs_from_sets<T: Eq + Hash + Clone + Ord>(items1: Vec<T>, items2: Vec<T>)
-                                                   -> Vec<PairSet<T>> {
-    let mut accum = Vec::new();
+pub fn pairs_from_sets<T: Eq + Hash + Clone + Ord>(items1: HashSet<T>,
+                                                   items2: HashSet<T>)
+                                                   -> HashSet<PairSet<T>> {
+    let mut accum = HashSet::new();
 
-    let mut sorted1 = items1.clone();
+    let mut sorted1: Vec<T> = items1.into_iter().collect();
     sorted1.sort();
 
-    let mut sorted2 = items2.clone();
+    let mut sorted2: Vec<T> = items2.into_iter().collect();
     sorted2.sort();
 
     for i in sorted1.iter().cloned() {
         for j in sorted2.iter().cloned() {
             if i != j && j > i {
-                accum.push(PairSet(i.clone(), j.clone()));
+                accum.insert(PairSet(i.clone(), j.clone()));
             }
         }
     }
@@ -261,8 +262,8 @@ mod pairs_test {
 
     #[test]
     fn yields_unique_pairs_from_sets() {
-        assert_eq!(pairs_from_sets(vec!{1, 2}, vec!{3}),
-                   vec!{PairSet(1, 3), PairSet(2, 3)})
+        assert_eq!(pairs_from_sets(hashset!{1, 2}, hashset!{3}),
+                   hashset!{PairSet(1, 3), PairSet(2, 3)})
     }
 }
 
@@ -382,17 +383,8 @@ impl Layer {
             //   to proposition mutees
             // - Check for intersection with mutex props
             if let Some(mx_props) = mutex_props.clone() {
-                let a1_req_vec: Vec<Proposition> = a1.clone().reqs
-                    .into_iter()
-                    .collect();
-                let a2_req_vec: Vec<Proposition> = a2.clone().reqs
-                    .into_iter()
-                    .collect();
-                let req_pairs = pairs_from_sets(a1_req_vec, a2_req_vec);
-                let req_pair_set:HashSet<PairSet<Proposition>> = req_pairs
-                    .into_iter()
-                    .collect();
-                let competing_needs: HashSet<PairSet<Proposition>> = req_pair_set
+                let req_pairs = pairs_from_sets(a1.clone().reqs, a2.clone().reqs);
+                let competing_needs: HashSet<PairSet<Proposition>> = req_pairs
                     .intersection(&mx_props)
                     .map(|i| i.to_owned())
                     .collect();
@@ -616,7 +608,10 @@ mod mutex_test {
 
 type LayerNumber = usize;
 
+type Solution = Vec<Vec<Action>>;
+
 pub struct PlanGraph {
+    goals: HashSet<Proposition>,
     actions: HashSet<Action>,
     layers: Vec<Layer>,
     mutex_props: HashMap<LayerNumber, MutexPairs<Proposition>>,
@@ -624,9 +619,12 @@ pub struct PlanGraph {
 }
 
 impl PlanGraph {
-    pub fn new(initial_props: HashSet<Proposition>, actions: HashSet<Action>) -> Self {
+    pub fn new(initial_props: HashSet<Proposition>,
+               goals: HashSet<Proposition>,
+               actions: HashSet<Action>) -> Self {
         // TODO make sure the initial props are not already mutex
         PlanGraph {
+            goals: goals,
             actions: actions,
             layers: vec![Layer::PropositionLayer(initial_props)],
             mutex_props: HashMap::new(),
@@ -638,7 +636,7 @@ impl PlanGraph {
         self.layers.push(layer.clone())
     }
 
-    /// Extends the plangraph to depth i + 1
+    /// Extends the plangraph to depth i+1
     /// Inserts another action layer and proposition layer
     pub fn extend(&mut self) {
         let length = self.layers.len();
@@ -688,6 +686,7 @@ impl PlanGraph {
         }
     }
 
+    /// Returns the depth of the planning graph
     pub fn depth(&self) -> usize {
         if self.layers.len() > 2 {
             (self.layers.len() - 1) / 2
@@ -696,21 +695,124 @@ impl PlanGraph {
         }
     }
 
-    pub fn search<T>(&self, solver: T) -> Vec<Vec<Action>> where T: GraphPlanSolver {
-        solver.search(self)
+    pub fn actions_at_layer(&self, index: usize) -> Result<HashSet<Action>, String> {
+        self.layers.get(index).map_or(
+            Err(format!("Layer {} does not exist", index)),
+            |layer| {
+                match layer {
+                    Layer::ActionLayer(actions) => Ok(actions.clone()),
+                    Layer::PropositionLayer(_) => {
+                        Err(format!("Tried to get actions from proposition layer {}",
+                                    index))
+                    }
+                }
+            }
+        )
+    }
+
+    fn has_possible_solution(&self) -> bool {
+        let last_layer_idx = self.layers.clone().len() - 1;
+        if let Some(prop_layer) = self.layers.get(last_layer_idx) {
+            match prop_layer {
+                Layer::PropositionLayer(props) => self.goals.is_subset(props),
+                _ => false
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Searches the planning graph for a solution using the solver if
+    /// there is no solution, extends the graph to depth i+1 and tries
+    /// to solve again
+    pub fn search_with<T>(&mut self, solver: T) -> Option<Solution>
+    where T: GraphPlanSolver {
+        let mut result = None;
+        // TODO maybe make this configurable
+        let max_tries = self.actions.len() + 1;
+        let mut tries = 0;
+
+        while tries < max_tries {
+            if self.has_possible_solution() {
+                if let Some(solution) = solver.search(self) {
+                    result = Some(solution);
+                    break;
+                }
+            } else {
+                tries += 1;
+                self.extend();
+            }
+        }
+        result
     }
 }
 
 pub trait GraphPlanSolver {
-    fn search(&self, plangraph: &PlanGraph) -> Vec<Vec<Action>>;
+    /// Searches a plangraph for a collection of actions that
+    /// satisfies the goals
+    fn search(&self, plangraph: &PlanGraph) -> Option<Solution>;
 }
 
 struct SimpleSolver;
 
-impl GraphPlanSolver for SimpleSolver {
-    fn search(&self, plangraph: &PlanGraph) -> Vec<Vec<Action>> {
+impl SimpleSolver {
+    fn new() -> SimpleSolver {
+        SimpleSolver {}
+    }
+}
 
-        vec![]
+impl GraphPlanSolver for SimpleSolver {
+    fn search(&self, plangraph: &PlanGraph) -> Option<Solution> {
+        let mut stack: Vec<(usize, HashSet<Proposition>, HashSet<Action>, HashSet<Action>)> = Vec::new();
+        let mut index = plangraph.layers.len() - 1;
+        let mut plan = Solution::new();
+
+        // Add the end goals to the stack
+        // Stack is a type of the (layer index, goal props, attempts)
+        stack.push((index, plangraph.goals.clone(), HashSet::new(), HashSet::new()));
+
+        while !stack.is_empty() {
+            stack.pop().map(|(idx, goals, accum, attempts)| {
+                let actions = plangraph.actions_at_layer(idx - 1).unwrap();
+                for g in goals {
+                    // Only actions that produce the goal and are not
+                    // mutex with any other actions and have not
+                    // already been attempted in combination with the
+                    // other attempted actions and are not mutex with
+                    // any other action
+                    let available_actions: Vec<Action> = actions.clone()
+                        .into_iter()
+                        .filter(|a| {
+                            let mut acts = accum.clone();
+                            acts.insert(a.clone());
+                            let mutexes = plangraph.mutex_actions
+                                .get(&(idx - 1))
+                                .unwrap();
+                            let pairs = pairs_from_sets(hashset!{a.clone()}, acts);
+                            let action_mutexes: Vec<PairSet<Action>> = mutexes
+                                .intersection(&pairs)
+                                .into_iter()
+                                .cloned()
+                                .collect();
+                            a.effects.contains(&g) &&
+                                !attempts.contains(&a) &&
+                                action_mutexes.is_empty()
+                        })
+                        .collect();
+                    if available_actions.is_empty() {
+                        break;
+                    } else {
+
+                    }
+                }
+            });
+        }
+
+        if plan.is_empty() {
+            None
+        } else {
+            Some(plan)
+        }
     }
 }
 
@@ -751,12 +853,15 @@ mod integration_test {
             hashset!{p2.clone().negate()},
         );
 
-        let mut pg = PlanGraph::new(hashset!{p1.clone(), p2.clone(), p3.clone()},
-                                    hashset!{a1.clone(), a2.clone()});
+        let mut pg = PlanGraph::new(
+            hashset!{p1.clone(), p2.clone(), p3.clone()},
+            hashset!{p1.clone().negate(),
+                     p2.negate().clone(),
+                     p3.clone()},
+            hashset!{a1.clone(), a2.clone()}
+        );
 
-        pg.extend();
-        assert_eq!(pg.depth(), 1);
-        pg.extend();
-        assert_eq!(pg.depth(), 2);
+        let solver = SimpleSolver::new();
+        assert!(pg.search_with(solver) != None, "Solution should not be None");
     }
 }
