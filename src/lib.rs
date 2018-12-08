@@ -79,22 +79,18 @@ mod proposition_test {
         // Sanity check
         assert_eq!(Proposition::from_str("test"), Proposition::from_str("test"));
         let p1 = Proposition::from_str("test");
-        {
-            assert!(false == p1.negation);
-        }
 
+        assert!(false == p1.negation);
         assert!(true == Proposition::from_str("test").negate().negation);
 
         let p2 = Proposition::from_str("test").negate();
-        {
-            assert!(
-                p2.is_negation(&p1),
-                format!("{:?} is not a negation of {:?}", p1, p2)
-            );
-        }
-        {
-            assert!(p1.is_negation(&p2));
-        }
+
+        assert!(
+            p2.is_negation(&p1),
+            format!("{:?} is not a negation of {:?}", p1, p2)
+        );
+
+        assert!(p1.is_negation(&p2));
     }
 
     #[test]
@@ -203,18 +199,17 @@ mod pair_set_test {
     }
 }
 
-/// Returns the pairs of a set of items
-pub fn pairs<T: Eq + Hash + Clone + Ord>(items: Vec<T>) -> Vec<PairSet<T>> {
-    let mut accum = Vec::new();
+/// Returns the unique pairs of a set of items
+pub fn pairs<T: Eq + Hash + Clone + Ord>(items: &HashSet<T>) -> HashSet<PairSet<T>> {
+    let mut accum = HashSet::new();
 
-    // TODO maybe try to borrow this instead?
-    let mut sorted = items.clone();
+    let mut sorted: Vec<T> = items.clone().into_iter().collect();
     sorted.sort();
 
     for i in sorted.iter().cloned() {
         for j in sorted.iter().cloned() {
             if i != j && j > i {
-                accum.push(PairSet(i.clone(), j.clone()));
+                accum.insert(PairSet(i.clone(), j.clone()));
             }
         }
     }
@@ -253,10 +248,10 @@ mod pairs_test {
         let p2 = Proposition::from_str("b");
         let p3 = Proposition::from_str("c");
         assert_eq!(
-            vec![PairSet(p1.clone(), p2.clone()),
-                 PairSet(p1.clone(), p3.clone()),
-                 PairSet(p2.clone(), p3.clone())],
-            pairs(vec![p1.clone(), p2.clone(), p3.clone()])
+            hashset!{PairSet(p1.clone(), p2.clone()),
+                     PairSet(p1.clone(), p3.clone()),
+                     PairSet(p2.clone(), p3.clone())},
+            pairs(&hashset!{p1.clone(), p2.clone(), p3.clone()})
         );
     }
 
@@ -296,12 +291,11 @@ impl Layer {
             Layer::PropositionLayer(props) => {
                 let props_hash = HashSet::from_iter(props.iter().cloned());
                 let mut layer_data = ActionLayerData::new();
-                {
-                    for a in all_actions {
-                        // if a has all props push it to layer
-                        if a.reqs.is_subset(&props_hash) {
-                            layer_data.insert(a);
-                        }
+
+                for a in all_actions {
+                    // if a has all props push it to layer
+                    if a.reqs.is_subset(&props_hash) {
+                        layer_data.insert(a);
                     }
                 }
 
@@ -324,9 +318,7 @@ impl Layer {
                           mutex_props: Option<MutexPairs<Proposition>>)
                           -> MutexPairs<Action> {
         let mut mutexes = MutexPairs::new();
-        let action_vec: Vec<Action> = actions.into_iter().collect();
-        // TODO maybe pairs can take any Iterable instead
-        let action_pairs = pairs(action_vec);
+        let action_pairs = pairs(&actions);
 
         for PairSet(a1, a2) in action_pairs {
             // Inconsistent effects: The effect of one action is the
@@ -424,14 +416,13 @@ impl Layer {
         // - Set difference with the mutex_actions
         // - If there is no difference then the props are mutex
         if let Some(mx_actions) = mutex_actions {
-            let prop_vec: Vec<Proposition> = props.into_iter().collect();
-            for PairSet(p1, p2) in pairs(prop_vec) {
-                let viable_acts: Vec<Action> = actions.clone()
+            for PairSet(p1, p2) in pairs(&props) {
+                let viable_acts: HashSet<Action> = actions.clone()
                     .into_iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
                     .collect();
 
-                let viable_act_pairs: HashSet<PairSet<Action>> = pairs(viable_acts).into_iter().collect();
+                let viable_act_pairs: HashSet<PairSet<Action>> = pairs(&viable_acts).into_iter().collect();
 
                 let diff: HashSet<_> = viable_act_pairs
                     .difference(&mx_actions)
@@ -710,12 +701,27 @@ impl PlanGraph {
         )
     }
 
+    /// A solution is possible if all goals exist in the last
+    /// proposition layer and are not mutex
     fn has_possible_solution(&self) -> bool {
+        let goals = self.goals.clone();
         let last_layer_idx = self.layers.clone().len() - 1;
+
         if let Some(prop_layer) = self.layers.get(last_layer_idx) {
             match prop_layer {
-                Layer::PropositionLayer(props) => self.goals.is_subset(props),
-                _ => false
+                Layer::PropositionLayer(props) => {
+                    let all_goals_present = &goals.is_subset(props);
+                    let mutexes = self.mutex_props
+                        .get(&last_layer_idx)
+                        .unwrap_or(&MutexPairs::new())
+                        .to_owned();
+                    let goal_pairs = pairs(&goals);
+                    let mutex_goals: HashSet<_> = mutexes
+                        .intersection(&goal_pairs)
+                        .collect();
+                    *all_goals_present && mutex_goals.is_empty()
+                },
+                _ => panic!("Tried to check for a solution in an Layer::Action")
             }
         } else {
             false
@@ -764,8 +770,8 @@ impl SimpleSolver {
 impl GraphPlanSolver for SimpleSolver {
     fn search(&self, plangraph: &PlanGraph) -> Option<Solution> {
         let mut stack: Vec<(usize, HashSet<Proposition>, HashSet<Action>, HashSet<Action>)> = Vec::new();
-        let mut index = plangraph.layers.len() - 1;
-        let mut plan = Solution::new();
+        let index = plangraph.layers.len() - 1;
+        let plan = Solution::new();
 
         // Add the end goals to the stack
         // Stack is a type of the (layer index, goal props, attempts)
@@ -802,7 +808,6 @@ impl GraphPlanSolver for SimpleSolver {
                     if available_actions.is_empty() {
                         break;
                     } else {
-
                     }
                 }
             });
@@ -819,6 +824,15 @@ impl GraphPlanSolver for SimpleSolver {
 struct GraphPlan<T: GraphPlanSolver> {
     solver: T,
     data: PlanGraph,
+}
+
+impl<T: GraphPlanSolver> GraphPlan<T> {
+    // fn new(solver: T) -> GraphPlan<T> {
+    //     GraphPlan {
+    //         solver: solver,
+    //         data: PlanGraph::new()
+    //     }
+    // }
 }
 
 
