@@ -7,6 +7,9 @@ edition = "2018"
 [dev-dependencies]
 criterion = "0.2"
 
+[dependencies]
+itertools = "0.8"
+
 [[bench]]
 name = "plangraph"
 harness = false

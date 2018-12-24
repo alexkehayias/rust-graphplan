@@ -1,8 +1,10 @@
-use std::collections::{HashSet, HashMap};
+#![allow(dead_code)]
+use std::collections::{HashSet, HashMap, BTreeSet, VecDeque};
 use std::iter::FromIterator;
 use std::fmt;
 use std::cmp::{Ordering};
 use std::hash::{Hash,Hasher};
+use itertools::Itertools;
 
 #[macro_export]
 /// Create a **HashSet** from a list of elements. Implementation
@@ -37,6 +39,73 @@ macro_rules! hashset {
     };
 }
 
+#[macro_export]
+/// Create a **BTreeSet** from a list of elements. Implementation
+/// copied from the maplit library https://github.com/bluss/maplit
+///
+/// ## Example
+///
+/// ```
+/// #[macro_use] extern crate maplit;
+/// # fn main() {
+///
+/// let set = btreeset!{"a", "b"};
+/// assert!(set.contains("a"));
+/// assert!(set.contains("b"));
+/// assert!(!set.contains("c"));
+/// # }
+/// ```
+macro_rules! btreeset {
+    ($($key:expr,)+) => (btreeset!($($key),+));
+
+    ( $($key:expr),* ) => {
+        {
+            let mut _set = ::std::collections::BTreeSet::new();
+            $(
+                _set.insert($key);
+            )*
+            _set
+        }
+    };
+}
+
+#[macro_export]
+/// Create a **HashMap** from a list of key-value pairs. Implementation
+/// copied from the maplit library https://github.com/bluss/maplit
+///
+/// ## Example
+///
+/// ```
+/// #[macro_use] extern crate maplit;
+/// # fn main() {
+///
+/// let map = hashmap!{
+///     "a" => 1,
+///     "b" => 2,
+/// };
+/// assert_eq!(map["a"], 1);
+/// assert_eq!(map["b"], 2);
+/// assert_eq!(map.get("c"), None);
+/// # }
+/// ```
+macro_rules! hashmap {
+    (@single $($x:tt)*) => (());
+    (@count $($rest:expr),*) => (<[()]>::len(&[$(hashmap!(@single $rest)),*]));
+
+    ($($key:expr => $value:expr,)+) => { hashmap!($($key => $value),+) };
+    ($($key:expr => $value:expr),*) => {
+        {
+            let _cap = hashmap!(@count $($key),*);
+            let mut _map = ::std::collections::HashMap::with_capacity(_cap);
+            $(
+                let _ = _map.insert($key, $value);
+            )*
+            _map
+        }
+    };
+}
+
+
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone)]
 pub struct Proposition {
     name: &'static str,
@@ -44,7 +113,7 @@ pub struct Proposition {
 }
 
 impl fmt::Debug for Proposition {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}P:{}", if self.negation {"¬"} else {""}, self.name)
     }
 }
@@ -116,8 +185,9 @@ pub struct Action {
 }
 
 impl fmt::Debug for Action {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "A:{} {{req: {:?} effects: {:?}}}", self.name, self.reqs, self.effects)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // write!(f, "A:{} {{req: {:?} effects: {:?}}}", self.name, self.reqs, self.effects)
+        write!(f, "A:{}", self.name)
     }
 }
 
@@ -274,9 +344,7 @@ impl Layer {
     /// let prop_layer = Layer::PropositionLayer(hashset!{});
     /// Layer::from_layer(hashset![], prop_layer);
     /// ```
-    pub fn from_layer(all_actions: HashSet<Action>,
-                      layer: Layer)
-                      -> Layer {
+    pub fn from_layer(all_actions: HashSet<Action>, layer: Layer) -> Layer {
         match &layer {
             Layer::ActionLayer(actions) => {
                 let mut layer_data = PropositionLayerData::new();
@@ -293,7 +361,12 @@ impl Layer {
                 let mut layer_data = ActionLayerData::new();
 
                 for a in all_actions {
-                    // if a has all props push it to layer
+                    // If a has all props and no two of its
+                    // requirements are labeled as mutually exclusive
+                    // push it to the layer
+
+                    // TODO Pass in mutexes and check if no two of its
+                    // preconditions are labeled as mutually exclusive
                     if a.reqs.is_subset(&props_hash) {
                         layer_data.insert(a);
                     }
@@ -303,7 +376,7 @@ impl Layer {
                 for p in props {
                     layer_data.insert(
                         Action::new(
-                            format!("[maintain] {}", p.name),
+                            format!("[maintain] {}{}", if p.negation {"¬"} else {""}, p.name),
                             hashset!{p.clone()},
                             hashset!{p.clone()},
                         )
@@ -394,7 +467,6 @@ impl Layer {
     /// Propositions are mutex if
     /// - They are negations of one another
     /// - All ways of achieving the propositions at are pairwise mutex
-    /// Uses btrees because they are hashable due to insertion order
     pub fn proposition_mutexes(
         props: HashSet<Proposition>,
         actions: HashSet<Action>,
@@ -598,9 +670,10 @@ mod mutex_test {
 }
 
 type LayerNumber = usize;
+type Solution = Vec<HashSet<Action>>;
+type QueryActions = Result<BTreeSet<Action>, String>;
 
-type Solution = Vec<Vec<Action>>;
-
+#[derive(Debug)]
 pub struct PlanGraph {
     goals: HashSet<Proposition>,
     actions: HashSet<Action>,
@@ -686,12 +759,19 @@ impl PlanGraph {
         }
     }
 
-    pub fn actions_at_layer(&self, index: usize) -> Result<HashSet<Action>, String> {
+    // Returns the actions at layer index as an ordered set
+    pub fn actions_at_layer(&self, index: usize) -> QueryActions {
         self.layers.get(index).map_or(
             Err(format!("Layer {} does not exist", index)),
             |layer| {
                 match layer {
-                    Layer::ActionLayer(actions) => Ok(actions.clone()),
+                    Layer::ActionLayer(actions) => {
+                        let acts = actions
+                           .into_iter()
+                           .cloned()
+                           .collect::<BTreeSet<_>>();
+                        Ok(acts)
+                    },
                     Layer::PropositionLayer(_) => {
                         Err(format!("Tried to get actions from proposition layer {}",
                                     index))
@@ -721,7 +801,7 @@ impl PlanGraph {
                         .collect();
                     *all_goals_present && mutex_goals.is_empty()
                 },
-                _ => panic!("Tried to check for a solution in an Layer::Action")
+                _ => panic!("Tried to check for a solution in a Layer::Action")
             }
         } else {
             false
@@ -733,29 +813,31 @@ impl PlanGraph {
     /// to solve again
     pub fn search_with<T>(&mut self, solver: T) -> Option<Solution>
     where T: GraphPlanSolver {
-        let mut result = None;
-        // TODO maybe make this configurable
-        let max_tries = self.actions.len() + 1;
-        let mut tries = 0;
-
-        while tries < max_tries {
-            if self.has_possible_solution() {
-                if let Some(solution) = solver.search(self) {
-                    result = Some(solution);
-                    break;
-                }
-            } else {
-                tries += 1;
-                self.extend();
-            }
+        if self.has_possible_solution() {
+            solver.search(self)
+        } else {
+            // TODO extend the graph and try again until we know there
+            // is no solution
+            println!("[debug] No solution exists at depth {}", self.depth());
+            None
         }
-        result
+    }
+
+    /// Takes a solution and filters out maintenance actions
+    pub fn format_plan(solution: Option<Solution>) -> Option<Solution> {
+        solution.map(|steps| steps.iter()
+                     .map(|s| s.iter()
+                          .filter(|i| !i.name.contains("[maintain]"))
+                          .cloned()
+                          .collect())
+                     .collect()
+        )
     }
 }
 
 pub trait GraphPlanSolver {
-    /// Searches a plangraph for a collection of actions that
-    /// satisfies the goals
+    /// Searches a plangraph for a sequence of collection of actions
+    /// that satisfy the goals
     fn search(&self, plangraph: &PlanGraph) -> Option<Solution>;
 }
 
@@ -767,57 +849,272 @@ impl SimpleSolver {
     }
 }
 
-impl GraphPlanSolver for SimpleSolver {
-    fn search(&self, plangraph: &PlanGraph) -> Option<Solution> {
-        let mut stack: Vec<(usize, HashSet<Proposition>, HashSet<Action>, HashSet<Action>)> = Vec::new();
-        let index = plangraph.layers.len() - 1;
-        let plan = Solution::new();
+impl SimpleSolver {
+    fn action_combinations(goals: Vec<Proposition>,
+                           actions: BTreeSet<Action>,
+                           mutexes: Option<MutexPairs<Action>>) -> Option<(HashSet<Action>, HashMap<usize, BTreeSet<Action>>)>{
+        let mut stack: VecDeque<(
+            usize,
+        )> = VecDeque::new();
+        let mut action_accum = HashSet::new();
+        let mut attempts: HashMap<usize, BTreeSet<Action>> = HashMap::new();
+        let goal_len = goals.len();
+        let init_goal_idx = 0;
+        let mut goals_met = false;
 
         // Add the end goals to the stack
-        // Stack is a type of the (layer index, goal props, attempts)
-        stack.push((index, plangraph.goals.clone(), HashSet::new(), HashSet::new()));
+        stack.push_front((init_goal_idx,));
 
-        while !stack.is_empty() {
-            stack.pop().map(|(idx, goals, accum, attempts)| {
-                let actions = plangraph.actions_at_layer(idx - 1).unwrap();
-                for g in goals {
-                    // Only actions that produce the goal and are not
-                    // mutex with any other actions and have not
-                    // already been attempted in combination with the
-                    // other attempted actions and are not mutex with
-                    // any other action
-                    let available_actions: Vec<Action> = actions.clone()
+        while let Some((goal_idx, )) = stack.pop_front() {
+            let available_actions = if let Some(acts) = attempts.get(&goal_idx) {
+                acts.to_owned()
+            } else {
+                let goal = &goals[goal_idx];
+                println!("[debug] Looking for action for goal {:?} in {:?}", goal, actions.clone());
+                let mut available = BTreeSet::new();
+                // Only actions that produce the goal and are not
+                // mutex with any other actions and have not
+                // already been attempted in combination with the
+                // other attempted actions and are not mutex with
+                // any other action
+                for a in &actions {
+                    // Early continue since the later checks are
+                    // more expensive
+                    if !a.effects.contains(goal) {
+                        continue
+                    };
+
+                    if action_accum.contains(a) {
+                        available.insert(a.clone());
+                        break
+                    };
+
+                    // Check if this action is mutex with any of
+                    // the other accumulated actions
+                    let mut acts = action_accum.clone();
+                    acts.insert(a.clone());
+                    let pairs = pairs_from_sets(
+                        hashset!{a.clone()},
+                        acts
+                    );
+                    let action_mutexes: Vec<PairSet<Action>> = mutexes
+                        .clone()
+                        .unwrap_or(HashSet::new())
+                        .intersection(&pairs)
                         .into_iter()
-                        .filter(|a| {
-                            let mut acts = accum.clone();
-                            acts.insert(a.clone());
-                            let mutexes = plangraph.mutex_actions
-                                .get(&(idx - 1))
-                                .unwrap();
-                            let pairs = pairs_from_sets(hashset!{a.clone()}, acts);
-                            let action_mutexes: Vec<PairSet<Action>> = mutexes
-                                .intersection(&pairs)
-                                .into_iter()
-                                .cloned()
-                                .collect();
-                            a.effects.contains(&g) &&
-                                !attempts.contains(&a) &&
-                                action_mutexes.is_empty()
-                        })
+                        .cloned()
                         .collect();
-                    if available_actions.is_empty() {
-                        break;
-                    } else {
-                    }
-                }
-            });
-        }
 
-        if plan.is_empty() {
-            None
+                    if action_mutexes.is_empty() {
+                        available.insert(a.clone());
+                    }
+                };
+                available
+            };
+
+            if available_actions.is_empty() {
+                if goal_idx == 0 {
+                    // Complete fail
+                    break;
+                }
+                // Go back to previous goal
+                println!("[debug] Unable to find actions for goal {:?}. Going back to previous goal...", goal_idx);
+                stack.push_front((goal_idx - 1,));
+            } else {
+                // Add the action to the plan and continue
+                let next_action = available_actions.iter()
+                    .next()
+                    .map(|i| {action_accum.insert(i.clone()); i})
+                    .unwrap();
+                println!("[debug] Selected action {:?}", next_action.clone());
+
+                // Add to previous attempts in case we need to backtrack
+                let mut remaining_actions = available_actions.clone();
+                remaining_actions.remove(&next_action);
+                attempts.insert(goal_idx, remaining_actions);
+
+                // TODO if this action staisfies more than one
+                // goal then handle that...
+
+                // Proceed to the next goal
+                if goal_idx < goal_len - 1 {
+                    stack.push_front((goal_idx + 1,));
+                } else {
+                    goals_met = true;
+                }
+            };
+        };
+
+        if goals_met {
+            Some((action_accum, attempts))
         } else {
-            Some(plan)
+            None
         }
+    }
+}
+
+impl GraphPlanSolver for SimpleSolver {
+    fn search<>(&self, plangraph: &PlanGraph) -> Option<Solution> {
+        // The implementation is basically a recursive function where
+        // we are using a stack and a loop rather than a recursive
+        // function. Not sure how recursion works with Rust and the
+        // allowed call depth so sticking with this approach for now
+        let mut success = false;
+        let mut plan = Solution::new();
+
+        // Initialize the loop
+        let mut stack: VecDeque<(usize, Vec<Proposition>)> = VecDeque::new();
+        let init_goals: Vec<Proposition> = plangraph.goals.clone()
+            .into_iter()
+            .collect();
+        let init_layer_idx = plangraph.layers.clone().len() - 1;
+        stack.push_front((init_layer_idx, init_goals));
+
+        while let Some((idx, goals)) = stack.pop_front() {
+            println!("[debug] Working on layer {:?} with goals {:?}", idx, goals);
+            // Note: This is a btreeset so ordering is guaranteed
+            // TODO maybe remove the use of unwrap
+            let actions = plangraph.actions_at_layer(idx - 1).unwrap();
+            let mutexes = plangraph.mutex_actions.get(&(idx - 1)).cloned();
+
+            if let Some((goal_actions, _attempts)) = SimpleSolver::action_combinations(goals.clone(), actions.clone(), mutexes) {
+                println!("[debug] Found actions {:?}", goal_actions);
+                // If we are are on the second to last proposition
+                // layer, we are done
+                if (idx - 2) == 0 {
+                    plan.push(goal_actions.clone());
+                    println!("[debug] Found plan! {:?}", plan);
+                    success = true;
+                } else {
+                    plan.push(goal_actions.clone());
+                    let next_goals = goal_actions.into_iter()
+                        .flat_map(|action| action.reqs)
+                        .unique()
+                        .collect();
+                    stack.push_front((idx - 2, next_goals));
+                };
+            } else {
+                println!("[debug] Unable to find actions for goals {:?} from actions {:?}", goals, actions);
+            }
+        };
+
+        if success {
+            // Since this solver goes from the last layer to the
+            // first, we need to reverse the plan
+            plan.reverse();
+            Some(plan)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod simple_solver_test {
+    use super::*;
+
+    #[test]
+    fn action_combinations_single_goal() {
+        let p1 = Proposition::from_str("coffee");
+        let p2 = Proposition::from_str("caffeinated");
+        let goals = vec![p2.clone()];
+        let mut actions = BTreeSet::new();
+        let a1 = Action::new(
+            String::from("drink coffee"),
+            hashset!{p1.clone()},
+            hashset!{p2.clone()}
+        );
+        actions.insert(a1.clone());
+        let mutexes = Some(MutexPairs::new());
+        let attempts: HashMap<usize, BTreeSet<Action>> = hashmap!{0 => btreeset!{}};
+        let expected = Some((hashset!{a1.clone()}, attempts));
+        let actual = SimpleSolver::action_combinations(goals, actions, mutexes);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn action_combinations_multiple_goals() {
+        let p1 = Proposition::from_str("coffee");
+        let p2 = Proposition::from_str("caffeinated");
+        let p3 = Proposition::from_str("breakfast");
+        let p4 = Proposition::from_str("full");
+        let goals = vec![p2.clone()];
+        let mut actions = BTreeSet::new();
+        let a1 = Action::new(
+            String::from("drink coffee"),
+            hashset!{p1.clone()},
+            hashset!{p2.clone()}
+        );
+        actions.insert(a1.clone());
+
+        let a2 = Action::new(
+            String::from("eat breakfast"),
+            hashset!{p3.clone()},
+            hashset!{p4.clone()}
+        );
+        actions.insert(a2.clone());
+
+        let mutexes = Some(MutexPairs::new());
+        let attempts: HashMap<usize, BTreeSet<Action>> = hashmap!{0 => btreeset!{}};
+        let expected = Some((hashset!{a1.clone(), a1.clone()}, attempts));
+        let actual = SimpleSolver::action_combinations(goals, actions, mutexes);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn solver_works() {
+        let p1 = Proposition::from_str("tired");
+        let p2 = Proposition::from_str("dog needs to pee");
+        let p3 = Proposition::from_str("caffeinated");
+
+        let a1 = Action::new(
+            String::from("coffee"),
+            hashset!{p1.clone()},
+            hashset!{p3.clone(), p1.clone().negate()}
+        );
+
+        let a2 = Action::new(
+            String::from("walk dog"),
+            hashset!{p2.clone(), p3.clone()},
+            hashset!{p2.clone().negate()},
+        );
+
+        let mut pg = PlanGraph::new(
+            hashset!{p1.clone(), p2.clone()},
+            hashset!{p1.clone().negate(),
+                     p2.clone().negate(),
+                     p3.clone()},
+            hashset!{a1.clone(), a2.clone()}
+        );
+        pg.extend();
+        pg.extend();
+        println!("Plangraph: {:?}", pg);
+
+        let solver = SimpleSolver::new();
+        let expected = Some(vec![hashset!{a1.clone()}, hashset!{a2.clone()}]);
+        let actual = PlanGraph::format_plan(solver.search(&pg));
+        assert_eq!(expected, actual);
+    }
+}
+
+#[cfg(test)]
+/// Prove that BTreeSet preserves ordering
+mod btreeset_test {
+    use super::*;
+
+    #[test]
+    fn is_sorted () {
+        let mut b = BTreeSet::new();
+        b.insert(2);
+        b.insert(3);
+        b.insert(1);
+        assert_eq!(b.into_iter().collect::<Vec<_>>(), vec![1, 2, 3]);
+
+        let mut b = BTreeSet::new();
+        b.insert(1);
+        b.insert(2);
+        b.insert(3);
+        assert_eq!(b.into_iter().collect::<Vec<_>>(), vec![1, 2, 3]);
     }
 }
 
@@ -833,16 +1130,6 @@ impl<T: GraphPlanSolver> GraphPlan<T> {
     //         data: PlanGraph::new()
     //     }
     // }
-}
-
-
-#[cfg(test)]
-mod plangraph_test {
-    use super::*;
-
-    #[test]
-    fn is_goal_satisfield () {
-    }
 }
 
 #[cfg(test)]

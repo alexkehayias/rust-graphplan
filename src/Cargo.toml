@@ -2,8 +2,10 @@
 name = "graphplan"
 version = "0.1.0"
 authors = ["Alex Kehayias <alex.kehayias@gmail.com>"]
+edition = "2018"
 
 [dependencies]
+itertools = "0.8"
 
 [lib]
 name = "graphplan"
