@@ -38,7 +38,7 @@ macro_rules! hashset {
 /// ## Example
 ///
 /// ```
-/// #[macro_use] extern crate maplit;
+/// #[macro_use] extern crate graphplan;
 /// # fn main() {
 ///
 /// let set = btreeset!{"a", "b"};
@@ -68,7 +68,7 @@ macro_rules! btreeset {
 /// ## Example
 ///
 /// ```
-/// #[macro_use] extern crate maplit;
+/// #[macro_use] extern crate graphplan;
 /// # fn main() {
 ///
 /// let map = hashmap!{

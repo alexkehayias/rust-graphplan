@@ -19,13 +19,6 @@ pub type MutexPairs<T> = HashSet<PairSet<T>>;
 impl Layer {
     /// Create a new layer from another. ActionLayer returns a
     /// PropositionLayer and PropositionLayer returns an ActionLayer
-    /// # Example
-    /// ```
-    /// #[macro_use] extern crate graphplan;
-    /// use graphplan::Layer;
-    /// let prop_layer = Layer::PropositionLayer(hashset!{});
-    /// Layer::from_layer(hashset![], prop_layer);
-    /// ```
     pub fn from_layer(all_actions: HashSet<Action>, layer: Layer) -> Layer {
         match &layer {
             Layer::ActionLayer(actions) => {

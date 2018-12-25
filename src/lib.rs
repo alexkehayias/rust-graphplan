@@ -39,7 +39,7 @@ mod integration_test {
         let a1 = Action::new(
             String::from("coffee"),
             hashset!{p1.clone()},
-            hashset!{p3.clone()}
+            hashset!{p3.clone(), p1.clone().negate()}
         );
 
         let a2 = Action::new(
@@ -49,13 +49,12 @@ mod integration_test {
         );
 
         let mut pg = PlanGraph::new(
-            hashset!{p1.clone(), p2.clone(), p3.clone()},
+            hashset!{p1.clone(), p2.clone()},
             hashset!{p1.clone().negate(),
-                     p2.negate().clone(),
+                     p2.clone().negate(),
                      p3.clone()},
             hashset!{a1.clone(), a2.clone()}
         );
-
         let solver = SimpleSolver::new();
         assert!(pg.search_with(solver) != None, "Solution should not be None");
     }

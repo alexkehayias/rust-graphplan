@@ -151,14 +151,28 @@ impl PlanGraph {
     /// to solve again
     pub fn search_with<T>(&mut self, solver: T) -> Option<Solution>
     where T: GraphPlanSolver {
-        if self.has_possible_solution() {
-            solver.search(self)
-        } else {
-            // TODO extend the graph and try again until we know there
-            // is no solution
-            debug!("No solution exists at depth {}", self.depth());
-            None
-        }
+        let mut tries = 0;
+        let mut solution = None;
+        let max_tries = self.actions.clone().len() + 1;
+
+        // TODO implement termination guarantess instead of max tries
+        while tries < max_tries {
+            if self.has_possible_solution() {
+                if let Some(s) = solver.search(self) {
+                    solution = Some(s);
+                    break;
+                } else {
+                    debug!("No solution found at depth {}", self.depth());
+                    self.extend();
+                    tries += 1
+                }
+            } else {
+                debug!("No solution exists at depth {}", self.depth());
+                self.extend();
+                tries += 1;
+            }
+        };
+        solution
     }
 
     /// Takes a solution and filters out maintenance actions
