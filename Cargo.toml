@@ -3,6 +3,33 @@ name = "graphplan"
 version = "0.1.0"
 authors = ["Alex Kehayias <alex.kehayias@gmail.com>"]
 edition = "2018"
+description = "Implementation of the Graphplan planning algorithm from Avrim L. Blum and Merrick L. Furst in Rust"
+repository = "https://github.com/alexkehayias/rust-graphplan"
+
+# This points to a file under the package root (relative to this `Cargo.toml`).
+# The contents of this file are stored and indexed in the registry.
+# crates.io will render this file and place the result on the crate's page.
+readme = "README.md"
+
+# This is a list of up to five keywords that describe this crate. Keywords
+# are searchable on crates.io, and you may choose any words that would
+# help someone find this crate.
+keywords = ["graphplan", "planning", "plangraph"]
+
+# This is a list of up to five categories where this crate would fit.
+# Categories are a fixed list available at crates.io/category_slugs, and
+# they must match exactly.
+categories = ["algorithms", "data-structures"]
+
+# This is an SPDX 2.1 license expression for this package.  Currently
+# crates.io will validate the license provided against a whitelist of
+# known license and exception identifiers from the SPDX license list
+# 2.4.  Parentheses are not currently supported.
+#
+# Multiple licenses can be separated with a `/`, although that usage
+# is deprecated.  Instead, use a license expression with AND and OR
+# operators to get more explicit semantics.
+license = "EPL-1.0"
 
 [dev-dependencies]
 criterion = "0.2"
