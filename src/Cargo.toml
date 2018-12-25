@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 itertools = "0.8"
+log = "0.4"
 
 [lib]
 name = "graphplan"

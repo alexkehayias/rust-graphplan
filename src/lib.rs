@@ -5,6 +5,8 @@ use std::fmt;
 use std::cmp::{Ordering};
 use std::hash::{Hash,Hasher};
 use itertools::Itertools;
+use log::{debug};
+
 
 #[macro_export]
 /// Create a **HashSet** from a list of elements. Implementation
@@ -818,7 +820,7 @@ impl PlanGraph {
         } else {
             // TODO extend the graph and try again until we know there
             // is no solution
-            println!("[debug] No solution exists at depth {}", self.depth());
+            debug!("No solution exists at depth {}", self.depth());
             None
         }
     }
@@ -870,7 +872,7 @@ impl SimpleSolver {
                 acts.to_owned()
             } else {
                 let goal = &goals[goal_idx];
-                println!("[debug] Looking for action for goal {:?} in {:?}", goal, actions.clone());
+                debug!("Looking for action for goal {:?} in {:?}", goal, actions.clone());
                 let mut available = BTreeSet::new();
                 // Only actions that produce the goal and are not
                 // mutex with any other actions and have not
@@ -918,7 +920,7 @@ impl SimpleSolver {
                     break;
                 }
                 // Go back to previous goal
-                println!("[debug] Unable to find actions for goal {:?}. Going back to previous goal...", goal_idx);
+                debug!("Unable to find actions for goal {:?}. Going back to previous goal...", goal_idx);
                 stack.push_front((goal_idx - 1,));
             } else {
                 // Add the action to the plan and continue
@@ -926,7 +928,7 @@ impl SimpleSolver {
                     .next()
                     .map(|i| {action_accum.insert(i.clone()); i})
                     .unwrap();
-                println!("[debug] Selected action {:?}", next_action.clone());
+                debug!("Selected action {:?}", next_action.clone());
 
                 // Add to previous attempts in case we need to backtrack
                 let mut remaining_actions = available_actions.clone();
@@ -971,19 +973,19 @@ impl GraphPlanSolver for SimpleSolver {
         stack.push_front((init_layer_idx, init_goals));
 
         while let Some((idx, goals)) = stack.pop_front() {
-            println!("[debug] Working on layer {:?} with goals {:?}", idx, goals);
+            debug!("Working on layer {:?} with goals {:?}", idx, goals);
             // Note: This is a btreeset so ordering is guaranteed
             // TODO maybe remove the use of unwrap
             let actions = plangraph.actions_at_layer(idx - 1).unwrap();
             let mutexes = plangraph.mutex_actions.get(&(idx - 1)).cloned();
 
             if let Some((goal_actions, _attempts)) = SimpleSolver::action_combinations(goals.clone(), actions.clone(), mutexes) {
-                println!("[debug] Found actions {:?}", goal_actions);
+                debug!("Found actions {:?}", goal_actions);
                 // If we are are on the second to last proposition
                 // layer, we are done
                 if (idx - 2) == 0 {
                     plan.push(goal_actions.clone());
-                    println!("[debug] Found plan! {:?}", plan);
+                    debug!("Found plan! {:?}", plan);
                     success = true;
                 } else {
                     plan.push(goal_actions.clone());
@@ -994,7 +996,7 @@ impl GraphPlanSolver for SimpleSolver {
                     stack.push_front((idx - 2, next_goals));
                 };
             } else {
-                println!("[debug] Unable to find actions for goals {:?} from actions {:?}", goals, actions);
+                debug!("Unable to find actions for goals {:?} from actions {:?}", goals, actions);
             }
         };
 
@@ -1088,7 +1090,7 @@ mod simple_solver_test {
         );
         pg.extend();
         pg.extend();
-        println!("Plangraph: {:?}", pg);
+        debug!("Plangraph: {:?}", pg);
 
         let solver = SimpleSolver::new();
         let expected = Some(vec![hashset!{a1.clone()}, hashset!{a2.clone()}]);
