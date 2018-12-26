@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
-#[macro_use] mod macros;
-mod pairset;
-mod proposition;
-mod action;
+#[macro_use] pub mod macros;
+pub mod proposition;
+pub mod action;
+pub mod plangraph;
 mod layer;
-mod plangraph;
+mod pairset;
 mod solver;
 
 // TODO package this up

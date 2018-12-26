@@ -1,10 +1,10 @@
-#[macro_use]
-extern crate criterion;
-
-
-use graphplan::*;
-
+#[macro_use] extern crate criterion;
 use criterion::Criterion;
+
+#[macro_use] extern crate graphplan;
+use graphplan::proposition::Proposition;
+use graphplan::action::Action;
+use graphplan::plangraph::PlanGraph;
 
 fn benchmark(c: &mut Criterion) {
     let p1 = Proposition::from_str("tired");
