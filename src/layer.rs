@@ -19,7 +19,7 @@ pub type MutexPairs<T> = HashSet<PairSet<T>>;
 impl Layer {
     /// Create a new layer from another. ActionLayer returns a
     /// PropositionLayer and PropositionLayer returns an ActionLayer
-    pub fn from_layer(all_actions: HashSet<Action>, layer: Layer) -> Layer {
+    pub fn from_layer(all_actions: HashSet<&Action>, layer: Layer) -> Layer {
         match &layer {
             Layer::ActionLayer(actions) => {
                 let mut layer_data = PropositionLayerData::new();
@@ -35,15 +35,10 @@ impl Layer {
                 let props_hash = HashSet::from_iter(props.iter().cloned());
                 let mut layer_data = ActionLayerData::new();
 
-                for a in all_actions {
-                    // If a has all props and no two of its
-                    // requirements are labeled as mutually exclusive
-                    // push it to the layer
-
-                    // TODO Pass in mutexes and check if no two of its
-                    // preconditions are labeled as mutually exclusive
+                for a in all_actions.to_owned() {
+                    // Include action a if it satisfies props
                     if a.reqs.is_subset(&props_hash) {
-                        layer_data.insert(a);
+                        layer_data.insert(a.to_owned());
                     }
                 }
 
@@ -63,7 +58,7 @@ impl Layer {
     }
 
     pub fn action_mutexes(actions: HashSet<Action>,
-                          mutex_props: Option<MutexPairs<Proposition>>)
+                          mutex_props: Option<&MutexPairs<Proposition>>)
                           -> MutexPairs<Action> {
         let mut mutexes = MutexPairs::new();
         let action_pairs = pairs(&actions);
@@ -283,7 +278,7 @@ mod mutex_test {
         );
         let actions = hashset!{a1.clone(), a2.clone()};
         let props = MutexPairs::new();
-        let actual = Layer::action_mutexes(actions, Some(props));
+        let actual = Layer::action_mutexes(actions, Some(&props));
 
         let mut expected = MutexPairs::new();
         expected.insert(PairSet(a1, a2));
@@ -306,7 +301,7 @@ mod mutex_test {
         );
         let actions = hashset!{a1.clone(), a2.clone()};
         let props = MutexPairs::new();
-        let actual = Layer::action_mutexes(actions, Some(props));
+        let actual = Layer::action_mutexes(actions, Some(&props));
 
         let mut expected = MutexPairs::new();
         expected.insert(PairSet(a1, a2));
@@ -335,7 +330,7 @@ mod mutex_test {
                 Proposition::from_str("hungry").negate()
             )
         );
-        let actual = Layer::action_mutexes(actions, Some(mutex_props));
+        let actual = Layer::action_mutexes(actions, Some(&mutex_props));
 
         let mut expected = MutexPairs::new();
         expected.insert(PairSet(a1, a2));

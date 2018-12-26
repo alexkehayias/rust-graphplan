@@ -48,9 +48,24 @@ impl PlanGraph {
                     panic!("Tried to extend a plangraph from an ActionLayer which is not allowed")
                 },
                 Layer::PropositionLayer(props) => {
-                    let mutex_props = self.mutex_props.get(&(length - 1)).cloned();
+                    let mutex_props = self.mutex_props.get(&(length - 1));
+                    let borrowed_all_actions: HashSet<&Action> = self.actions
+                        .iter()
+                        .collect();
+                    let actions_no_mutex_reqs = mutex_props
+                        .map(|mp| {
+                            self.actions.iter()
+                                .filter(|action| {
+                                    pairs(&action.reqs).intersection(&mp)
+                                        .collect::<Vec<_>>()
+                                        .is_empty()
+                                })
+                                .collect::<HashSet<_>>()
+                        })
+                        .unwrap_or(borrowed_all_actions.clone());
+
                     let action_layer = Layer::from_layer(
-                        self.actions.clone(),
+                        actions_no_mutex_reqs,
                         Layer::PropositionLayer(props)
                     );
                     let action_layer_actions = match action_layer.clone() {
@@ -65,7 +80,7 @@ impl PlanGraph {
                     self.mutex_actions.insert(self.layers.len(), action_mutexes.clone());
 
                     let prop_layer = Layer::from_layer(
-                        self.actions.clone(),
+                        borrowed_all_actions,
                         action_layer
                     );
                     let prop_layer_props = match prop_layer.clone() {
