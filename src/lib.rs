@@ -1,33 +1,47 @@
-#![allow(dead_code)]
+use std::collections::{HashSet};
 
 #[macro_use] pub mod macros;
 pub mod proposition;
 pub mod action;
 pub mod plangraph;
+pub mod solver;
 mod layer;
 mod pairset;
-mod solver;
 
-// TODO package this up
-// struct GraphPlan<T: GraphPlanSolver> {
-//     solver: T,
-//     data: PlanGraph,
-// }
+use crate::proposition::Proposition;
+use crate::action::Action;
+use crate::plangraph::{PlanGraph, Solution};
+use crate::solver::{GraphPlanSolver};
 
-// impl<T: GraphPlanSolver> GraphPlan<T> {
-//     // fn new(solver: T) -> GraphPlan<T> {
-//     //     GraphPlan {
-//     //         solver: solver,
-//     //         data: PlanGraph::new()
-//     //     }
-//     // }
-// }
+
+pub struct GraphPlan<T: GraphPlanSolver> {
+    pub solver: T,
+    pub plangraph: PlanGraph,
+}
+
+
+impl<T: GraphPlanSolver> GraphPlan<T> {
+    pub fn new(initial_props: HashSet<Proposition>,
+           goals: HashSet<Proposition>,
+           actions: HashSet<Action>,
+           solver: T) -> GraphPlan<T> {
+        let pg = PlanGraph::new(initial_props, goals, actions);
+        GraphPlan {
+            solver: solver,
+            plangraph: pg
+        }
+    }
+
+    pub fn search(&mut self) -> Option<Solution>{
+        self.plangraph.search_with(&self.solver)
+    }
+}
 
 #[cfg(test)]
 mod integration_test {
+    use crate::GraphPlan;
     use crate::proposition::Proposition;
     use crate::action::Action;
-    use crate::plangraph::{PlanGraph};
     use crate::solver::SimpleSolver;
 
     #[test]
@@ -48,14 +62,14 @@ mod integration_test {
             hashset!{p2.clone().negate()},
         );
 
-        let mut pg = PlanGraph::new(
+        let mut pg = GraphPlan::new(
             hashset!{p1.clone(), p2.clone()},
             hashset!{p1.clone().negate(),
                      p2.clone().negate(),
                      p3.clone()},
-            hashset!{a1.clone(), a2.clone()}
+            hashset!{a1.clone(), a2.clone()},
+            SimpleSolver::new()
         );
-        let solver = SimpleSolver::new();
-        assert!(pg.search_with(solver) != None, "Solution should not be None");
+        assert!(pg.search() != None, "Solution should not be None");
     }
 }

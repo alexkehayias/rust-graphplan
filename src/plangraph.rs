@@ -164,7 +164,7 @@ impl PlanGraph {
     /// Searches the planning graph for a solution using the solver if
     /// there is no solution, extends the graph to depth i+1 and tries
     /// to solve again
-    pub fn search_with<T>(&mut self, solver: T) -> Option<Solution>
+    pub fn search_with<T>(&mut self, solver: &T) -> Option<Solution>
     where T: GraphPlanSolver {
         let mut tries = 0;
         let mut solution = None;
