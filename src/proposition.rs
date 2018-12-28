@@ -4,7 +4,7 @@ use std::hash::{Hash,Hasher};
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone)]
 pub struct Proposition {
-    pub name: &'static str,
+    pub name: String,
     pub negation: bool,
 }
 
@@ -22,12 +22,16 @@ impl Hash for Proposition {
 }
 
 impl Proposition {
+    pub fn new(name: String, negation: bool) -> Proposition {
+        Proposition {name, negation}
+    }
+
     pub fn from_str(name: &'static str) -> Proposition {
-        Proposition {name, negation: false}
+        Proposition {name: String::from(name), negation: false}
     }
 
     pub fn negate(&self) -> Proposition {
-        Proposition { name: self.name, negation: !self.negation }
+        Proposition { name: self.name.clone(), negation: !self.negation }
     }
 
     pub fn is_negation(&self, prop: &Proposition) -> bool {
