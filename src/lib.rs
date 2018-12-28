@@ -2,8 +2,8 @@ use std::collections::{HashSet};
 use std::fs;
 
 #[macro_use] extern crate serde_derive;
-#[macro_use] extern crate serde;
-#[macro_use] use toml;
+extern crate serde;
+use toml;
 
 #[macro_use] pub mod macros;
 pub mod proposition;
@@ -61,22 +61,21 @@ impl GraphPlan<SimpleSolver> {
         let config: Config = toml::from_str(&st).expect("Fail");
         let initial_props: HashSet<Proposition> = config.initial
             .into_iter()
-            // TODO check if there is a prefix for "not"
-            .map(|i| Proposition::new(i, false))
+            .map(|i| Proposition::new(i.clone(), i.starts_with("not_")))
             .collect();
         let goals: HashSet<Proposition> = config.goals
             .into_iter()
-            .map(|i| Proposition::new(i, false))
+            .map(|i| Proposition::new(i.clone(), i.starts_with("not_")))
             .collect();
         let actions: HashSet<Action> = config.actions
             .into_iter()
             .map(|i| Action::new(
                 String::from(i.name),
                 i.reqs.iter()
-                    .map(|r| Proposition::new(r.to_string(), false))
+                    .map(|r| Proposition::new(r.clone(), r.starts_with("not_")))
                     .collect(),
                 i.effects.iter()
-                    .map(|e| Proposition::new(e.to_string(), false))
+                    .map(|e| Proposition::new(e.clone(), e.starts_with("not_")))
                     .collect()))
             .collect();
         let solver = SimpleSolver::new();
