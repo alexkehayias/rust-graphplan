@@ -6,6 +6,20 @@ Original paper: [Fast Planning Through Planning Graph Analysis](https://www.cs.c
 
 ## Usage
 
+You can load a domain from a toml file (see the `resources/example.toml` directory for expected format) and instantiate a `GraphPlan`.
+
+Example:
+
+```rust
+let path = String::from("resources/rocket_domain.toml");
+let mut pg: GraphPlan<SimpleSolver> = GraphPlan::from_toml(path);
+pg.search();
+```
+
+The lower level API allows you to constructing your own problem domain programmatically. You can also implement your own solver by implementing the `GraphPlanSolver` trait.
+
+Example:
+
 ```rust
 #[macro_use] extern crate graphplan;
 use graphplan::GraphPlan;

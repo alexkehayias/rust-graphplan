@@ -1,0 +1,16 @@
+initial = [
+  "tired",
+  "dog_needs_to_pee",
+  "not_caffeinated",
+]
+
+goals = [
+  "not_tired",
+  "not_dog_needs_to_pee",
+  "caffeinated",
+]
+
+actions = [
+  { name = "drink_coffee", reqs = ["tired"], effects = ["caffeinated", "not_tired"] },
+  { name = "walk_dog", reqs = ["dog_needs_to_pee", "caffeinated"], effects = ["not_dog_needs_to_pee"] },
+]
