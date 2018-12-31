@@ -350,7 +350,7 @@ impl GraphPlanSolver for SimpleSolver {
                 .unwrap();
 
             if let Some(goal_actions) = gen.next() {
-                println!("Found actions {:?}", goal_actions);
+                debug!("Found actions {:?}", goal_actions);
                 // If we are are on the second to last proposition
                 // layer, we are done
                 if (idx - 2) == 0 {
