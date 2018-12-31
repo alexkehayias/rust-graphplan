@@ -182,8 +182,10 @@ impl Iterator for ActionCombinationIterator {
                 remaining_actions.remove(&next_action);
                 self.attempts.insert(goal_idx, remaining_actions);
 
-                // TODO if this action staisfies more than one
-                // goal then handle that...
+                // TODO Implement minimal action sets i.e handle if
+                // this action staisfies more than one
+                // goal. Otherwise, the speed of finding a solution is
+                // dependent on the ordering of goals
 
                 // Proceed to the next goal
                 if goal_idx < goal_len - 1 {

@@ -24,7 +24,6 @@ impl PlanGraph {
     pub fn new(initial_props: HashSet<Proposition>,
                goals: HashSet<Proposition>,
                actions: HashSet<Action>) -> Self {
-        // TODO make sure the initial props are not already mutex
         PlanGraph {
             goals: goals,
             actions: actions,
@@ -165,9 +164,13 @@ impl PlanGraph {
     /// layer P and an adjacent proposition layer Q are equal
     fn has_leveled_off(&self) -> bool {
         let len = self.layers.len();
-        let prop_layer = self.layers.get(len - 1).expect("Failed to get layer");
-        let adjacent_prop_layer = self.layers.get(len - 3).expect("Failed to get adjacent layer");
-        prop_layer == adjacent_prop_layer
+        if len > 2 as usize {
+            let prop_layer = self.layers.get(len - 1).expect("Failed to get layer");
+            let adjacent_prop_layer = self.layers.get(len - 3).expect("Failed to get adjacent layer");
+            prop_layer == adjacent_prop_layer
+        } else {
+            false
+        }
     }
 
     /// Searches the planning graph for a solution using the solver if
@@ -179,8 +182,12 @@ impl PlanGraph {
         let mut solution = None;
         let max_tries = self.actions.clone().len() + 1;
 
-        // TODO implement termination guarantess instead of max tries
         while tries < max_tries {
+            // This doesn't provide early termination for _all_
+            // cases that won't yield a solution.
+            if self.has_leveled_off() {
+                break;
+            }
             if self.has_possible_solution() {
                 if let Some(s) = solver.search(self) {
                     solution = Some(s);

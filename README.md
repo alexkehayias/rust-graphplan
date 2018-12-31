@@ -1,43 +1,46 @@
 # Graphplan
 
-Implementation of the Graphplan planning algorithm and Plangraph data structure from Avrim L. Blum and Merrick L. Furst written in Rust.
+Implementation of the Graphplan planning algorithm and Plangraph data structure written in Rust.
+
+Original paper: [Fast Planning Through Planning Graph Analysis](https://www.cs.cmu.edu/~avrim/Papers/graphplan.pdf) by Avrim L. Blum and Merrick L. Furst
 
 ## Usage
 
 ```rust
-use graphplan::macros;
+#[macro_use] extern crate graphplan;
+use graphplan::GraphPlan;
 use graphplan::proposition::Proposition;
 use graphplan::action::Action;
-use graphplan::plangraph::PlanGraph;
+use graphplan::solver::SimpleSolver;
 
-let p1 = Proposition::from_str("tired");
-let p2 = Proposition::from_str("dog needs to pee");
-let p3 = Proposition::from_str("caffeinated");
+#[test]
+fn integration() {
+    let p1 = Proposition::from_str("tired");
+    let p2 = Proposition::from_str("dog needs to pee");
+    let p3 = Proposition::from_str("caffeinated");
 
-let a1 = Action::new(
-    String::from("coffee"),
-    hashset!{p1.clone()},
-    hashset!{p3.clone(), p1.clone().negate()}
-);
+    let a1 = Action::new(
+        String::from("coffee"),
+        hashset!{p1.clone()},
+        hashset!{p3.clone(), p1.clone().negate()}
+    );
 
-let a2 = Action::new(
-    String::from("walk dog"),
-    hashset!{p2.clone(), p3.clone()},
-    hashset!{p2.clone().negate()},
-);
+    let a2 = Action::new(
+        String::from("walk dog"),
+        hashset!{p2.clone(), p3.clone()},
+        hashset!{p2.clone().negate()},
+    );
 
-let mut pg = PlanGraph::new(
-    hashset!{p1.clone(), p2.clone()},
-    hashset!{p1.clone().negate(),
-             p2.clone().negate(),
-             p3.clone()},
-    hashset!{a1.clone(), a2.clone()}
-);
-pg.extend();
-pg.extend();
-
-let solver = SimpleSolver::new();
-println!("Result: {:?}", PlanGraph::format_plan(solver.search(&pg));
+    let mut pg = GraphPlan::new(
+        hashset!{p1.clone(), p2.clone()},
+        hashset!{p1.clone().negate(),
+                 p2.clone().negate(),
+                 p3.clone()},
+        hashset!{a1.clone(), a2.clone()},
+        SimpleSolver::new()
+    );
+    println!("Result: {:?}", PlanGraph::format_plan(pg.search());
+}
 ```
 
 ## License
