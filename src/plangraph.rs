@@ -161,6 +161,15 @@ impl PlanGraph {
         }
     }
 
+    /// The graph is considered to have "leveled off" when proposition
+    /// layer P and an adjacent proposition layer Q are equal
+    fn has_leveled_off(&self) -> bool {
+        let len = self.layers.len();
+        let prop_layer = self.layers.get(len - 1).expect("Failed to get layer");
+        let adjacent_prop_layer = self.layers.get(len - 3).expect("Failed to get adjacent layer");
+        prop_layer == adjacent_prop_layer
+    }
+
     /// Searches the planning graph for a solution using the solver if
     /// there is no solution, extends the graph to depth i+1 and tries
     /// to solve again
@@ -183,6 +192,7 @@ impl PlanGraph {
                 }
             } else {
                 debug!("No solution exists at depth {}", self.depth());
+                // TODO Determine if we should continue
                 self.extend();
                 tries += 1;
             }
