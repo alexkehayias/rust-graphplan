@@ -44,3 +44,7 @@ serde_derive = "1.0"
 [[bench]]
 name = "plangraph"
 harness = false
+
+[[bench]]
+name = "solver"
+harness = false

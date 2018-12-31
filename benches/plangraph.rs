@@ -6,7 +6,7 @@ use graphplan::proposition::Proposition;
 use graphplan::action::Action;
 use graphplan::plangraph::PlanGraph;
 
-fn benchmark(c: &mut Criterion) {
+fn plangraph_benchmark(c: &mut Criterion) {
     let p1 = Proposition::from_str("tired");
     let p2 = Proposition::from_str("dog needs to pee");
     let p3 = Proposition::from_str("caffeinated");
@@ -36,5 +36,5 @@ fn benchmark(c: &mut Criterion) {
     }));
 }
 
-criterion_group!(benches, benchmark);
+criterion_group!(benches, plangraph_benchmark);
 criterion_main!(benches);
