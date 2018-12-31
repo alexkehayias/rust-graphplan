@@ -322,11 +322,9 @@ impl GraphPlanSolver for SimpleSolver {
 
         // Initialize the loop
         let mut stack: VecDeque<(usize, Vec<Proposition>, Option<ActionCombinationIterator>)> = VecDeque::new();
-        let mut goalset_stack: VecDeque<Vec<Proposition>> = VecDeque::new();
         let init_goals: Vec<Proposition> = plangraph.goals.clone()
             .into_iter()
             .collect();
-        goalset_stack.push_front(init_goals.clone());
         let init_layer_idx = plangraph.layers.clone().len() - 1;
         let init_action_gen = None;
         stack.push_front((init_layer_idx, init_goals, init_action_gen));

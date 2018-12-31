@@ -192,7 +192,6 @@ impl PlanGraph {
                 }
             } else {
                 debug!("No solution exists at depth {}", self.depth());
-                // TODO Determine if we should continue
                 self.extend();
                 tries += 1;
             }
