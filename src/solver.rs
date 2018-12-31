@@ -29,30 +29,37 @@ type Attempts = HashMap<usize, BTreeSet<Action>>;
 struct ActionCombination(HashMap<GoalIndex, Action>);
 
 impl ActionCombination {
-    pub fn to_set(&self) -> HashSet<Action> {
+    pub fn as_set(&self) -> HashSet<Action> {
         self.0.values()
             .cloned()
             .into_iter()
             .collect::<HashSet<Action>>()
     }
+
+    pub fn as_vec(&self) -> Vec<Action> {
+        self.0.values()
+            .cloned()
+            .into_iter()
+            .collect::<Vec<Action>>()
+    }
 }
 
 #[derive(Clone, Debug)]
-struct ActionCombinations {
+struct GoalSetActionGenerator {
     goals: Vec<Proposition>,
     actions: BTreeSet<Action>,
     mutexes: Option<MutexPairs<Action>>,
 }
 
-impl ActionCombinations {
+impl GoalSetActionGenerator {
     pub fn new(goals: Vec<Proposition>,
                actions: BTreeSet<Action>,
-               mutexes: Option<MutexPairs<Action>>,) -> ActionCombinations {
-        ActionCombinations {goals, actions, mutexes}
+               mutexes: Option<MutexPairs<Action>>,) -> GoalSetActionGenerator {
+        GoalSetActionGenerator {goals, actions, mutexes}
     }
 }
 
-impl IntoIterator for ActionCombinations {
+impl IntoIterator for GoalSetActionGenerator {
     type Item = ActionCombination;
     type IntoIter = ActionCombinationIterator;
 
@@ -63,14 +70,14 @@ impl IntoIterator for ActionCombinations {
 
 #[derive(Clone, Debug)]
 struct ActionCombinationIterator {
-    meta: ActionCombinations, // defines goals we are trying achieve
+    meta: GoalSetActionGenerator, // defines goals we are trying achieve
     attempts: Attempts, // previous attempts to meet a goal
     goals_met: bool, // flag indicating all goals are met or restart
     accum: HashMap<GoalIndex, Action> // combination of actions
 }
 
 impl ActionCombinationIterator {
-    pub fn new(action_combinations: ActionCombinations) -> ActionCombinationIterator {
+    pub fn new(action_combinations: GoalSetActionGenerator) -> ActionCombinationIterator {
         ActionCombinationIterator {
             meta: action_combinations,
             attempts: Attempts::new(),
@@ -94,9 +101,11 @@ impl Iterator for ActionCombinationIterator {
         // If the goals have already been met, we need to look for a
         // new combination that also meets the goals
         if self.goals_met {
+            debug!("Resuming action combination generator: {:?}", self.clone());
             // Remove the previous action used to satisfy the last
             // goal and start the loop from the last goal. This will
             // yield a new combination or recursively back track.
+            self.goals_met = false;
             let goal_idx = goal_len - 1;
             self.accum.remove(&goal_idx);
             stack.push_front((goal_idx,));
@@ -134,7 +143,7 @@ impl Iterator for ActionCombinationIterator {
                     acts.insert(goal_idx, a.clone());
                     let pairs = pairs_from_sets(
                         hashset!{a.clone()},
-                        ActionCombination(acts).to_set()
+                        ActionCombination(acts).as_set()
                     );
                     let action_mutexes: Vec<PairSet<Action>> = mutexes
                         .clone()
@@ -193,94 +202,13 @@ impl Iterator for ActionCombinationIterator {
     }
 }
 
-impl SimpleSolver {
-    fn action_combinations(goals: Vec<Proposition>,
-                           actions: BTreeSet<Action>,
-                           mutexes: Option<MutexPairs<Action>>) -> Option<(ActionCombination, ActionCombinationIterator)> {
-        let mut iterable = ActionCombinations::new(goals, actions, mutexes).into_iter();
-
-        if let Some(i) = iterable.next() {
-            Some((i, iterable))
-        } else {
-            None
-        }
-    }
-}
-
-impl GraphPlanSolver for SimpleSolver {
-    fn search<>(&self, plangraph: &PlanGraph) -> Option<Solution> {
-        // The implementation is basically a recursive function where
-        // we are using a stack and a loop rather than a recursive
-        // function. Not sure how recursion works with Rust and the
-        // allowed call depth so sticking with this approach for now
-        let mut success = false;
-        let mut plan = Solution::new();
-        let mut failed_goals_memo: HashSet<(usize, Vec<Proposition>)> = HashSet::new();
-
-        // Initialize the loop
-        let mut stack: VecDeque<(usize, Vec<Proposition>)> = VecDeque::new();
-        let init_goals: Vec<Proposition> = plangraph.goals.clone()
-            .into_iter()
-            .collect();
-        let init_layer_idx = plangraph.layers.clone().len() - 1;
-        stack.push_front((init_layer_idx, init_goals));
-
-        while let Some((idx, goals)) = stack.pop_front() {
-            debug!("Working on layer {:?} with goals {:?}", idx, goals);
-            // Check if the goal set is unsolvable at level i
-            if failed_goals_memo.contains(&(idx, goals.clone())) {
-                // TODO go back to previous goalset
-            }
-
-            // Note: This is a btreeset so ordering is guaranteed
-            let actions = plangraph.actions_at_layer(idx - 1)
-                .expect("Failed to get actions");
-            let mutexes = plangraph.mutex_actions.get(&(idx - 1)).cloned();
-
-            if let Some((goal_actions, _iter)) = SimpleSolver::action_combinations(goals.clone(), actions.clone(), mutexes) {
-                debug!("Found actions {:?}", goal_actions);
-                // If we are are on the second to last proposition
-                // layer, we are done
-                if (idx - 2) == 0 {
-                    plan.push(goal_actions.to_set());
-                    debug!("Found plan! {:?}", plan);
-                    success = true;
-                } else {
-                    plan.push(goal_actions.to_set());
-                    let next_goals = goal_actions.to_set().into_iter()
-                        .flat_map(|action| action.reqs)
-                        .unique()
-                        .collect();
-                    stack.push_front((idx - 2, next_goals));
-                };
-            } else {
-                debug!("Unable to find actions for goals {:?} from actions {:?}", goals, actions);
-                // Record the failed goals at level i and retry with
-                // another set of actions if possible
-                failed_goals_memo.insert((idx, goals.clone()));
-                // TODO go back to previous goalset
-                let next_goals = goals.clone();
-                stack.push_front((idx + 2, next_goals));
-            }
-        };
-
-        if success {
-            // Since this solver goes from the last layer to the
-            // first, we need to reverse the plan
-            plan.reverse();
-            Some(plan)
-        } else {
-            None
-        }
-    }
-}
 
 #[cfg(test)]
-mod simple_solver_test {
+mod goal_set_action_generator_test {
     use super::*;
 
     #[test]
-    fn action_combinations_single_goal() {
+    fn single_goal() {
         let p1 = Proposition::from_str("coffee");
         let p2 = Proposition::from_str("caffeinated");
         let goals = vec![p2.clone()];
@@ -293,17 +221,15 @@ mod simple_solver_test {
         actions.insert(a1.clone());
         let mutexes = Some(MutexPairs::new());
         let expected = ActionCombination(hashmap!{0 => a1});
-        let (actual, _) = SimpleSolver::action_combinations(goals, actions, mutexes).unwrap();
+        let actual = GoalSetActionGenerator::new(goals, actions, mutexes)
+            .into_iter()
+            .next()
+            .unwrap();
         assert_eq!(expected, actual);
     }
 
     #[test]
-    fn action_combinations_resume() {
-        assert!(false, "Pleaase test condition where we want to resume action combinations")
-    }
-
-    #[test]
-    fn action_combinations_multiple_goals() {
+    fn multiple_goals() {
         let p1 = Proposition::from_str("coffee");
         let p2 = Proposition::from_str("caffeinated");
         let p3 = Proposition::from_str("breakfast");
@@ -326,9 +252,145 @@ mod simple_solver_test {
 
         let mutexes = Some(MutexPairs::new());
         let expected = ActionCombination(hashmap!{0 => a1.clone(), 1 => a2.clone()});
-        let (actual, _) = SimpleSolver::action_combinations(goals, actions, mutexes).unwrap();
+        let actual = GoalSetActionGenerator::new(goals, actions, mutexes)
+            .into_iter()
+            .next()
+            .unwrap();
         assert_eq!(expected, actual);
     }
+
+    #[test]
+    fn yields_all() {
+        let p1 = Proposition::from_str("tea");
+        let p2 = Proposition::from_str("coffee");
+        let p3 = Proposition::from_str("caffeinated");
+        let p4 = Proposition::from_str("scone");
+        let p5 = Proposition::from_str("muffin");
+        let p6 = Proposition::from_str("full");
+        let goals = vec![p3.clone(), p6.clone()];
+        let mut actions = BTreeSet::new();
+
+        let a1 = Action::new(
+            String::from("drink coffee"),
+            hashset!{p2.clone()},
+            hashset!{p3.clone()}
+        );
+        actions.insert(a1.clone());
+
+        let a2 = Action::new(
+            String::from("drink tea"),
+            hashset!{p1.clone()},
+            hashset!{p3.clone()}
+        );
+        actions.insert(a2.clone());
+
+        let a3 = Action::new(
+            String::from("eat scone"),
+            hashset!{p4.clone()},
+            hashset!{p6.clone()}
+        );
+        actions.insert(a3.clone());
+
+        let a4 = Action::new(
+            String::from("eat muffin"),
+            hashset!{p5.clone()},
+            hashset!{p6.clone()}
+        );
+        actions.insert(a4.clone());
+
+        let mutexes = Some(MutexPairs::new());
+        let expected = vec![
+            vec![a1.clone(), a4.clone()],
+            vec![a1.clone(), a3.clone()],
+            vec![a2.clone(), a4.clone()],
+            vec![a2.clone(), a3.clone()],
+        ];
+        let generator = GoalSetActionGenerator::new(goals, actions, mutexes);
+        let actual: Vec<Vec<Action>> = generator.into_iter()
+            .map(|combo| {let mut i = combo.as_vec(); i.sort(); i})
+            .collect();
+
+        assert_eq!(expected, actual);
+    }
+}
+
+impl GraphPlanSolver for SimpleSolver {
+    fn search<>(&self, plangraph: &PlanGraph) -> Option<Solution> {
+        let mut success = false;
+        let mut plan = Solution::new();
+        let mut failed_goals_memo: HashSet<(usize, Vec<Proposition>)> = HashSet::new();
+
+        // Initialize the loop
+        let mut stack: VecDeque<(usize, Vec<Proposition>, Option<ActionCombinationIterator>)> = VecDeque::new();
+        let mut goalset_stack: VecDeque<Vec<Proposition>> = VecDeque::new();
+        let init_goals: Vec<Proposition> = plangraph.goals.clone()
+            .into_iter()
+            .collect();
+        goalset_stack.push_front(init_goals.clone());
+        let init_layer_idx = plangraph.layers.clone().len() - 1;
+        let init_action_gen = None;
+        stack.push_front((init_layer_idx, init_goals, init_action_gen));
+
+        while let Some((idx, goals, action_gen)) = stack.pop_front() {
+            debug!("Working on layer {:?} with goals {:?}", idx, goals);
+            // Check if the goal set is unsolvable at level idx
+            if failed_goals_memo.contains(&(idx, goals.clone())) {
+                // Continue to previous layer (the next element in the queue)
+                continue;
+            }
+
+            // Note: This is a btreeset so ordering is guaranteed
+            let actions = plangraph.actions_at_layer(idx - 1)
+                .expect("Failed to get actions");
+            let mutexes = plangraph.mutex_actions.get(&(idx - 1)).cloned();
+            let mut gen = action_gen
+                .or(Some(GoalSetActionGenerator::new(goals.clone(),
+                                                     actions.clone(),
+                                                     mutexes).into_iter()))
+                .unwrap();
+
+            if let Some(goal_actions) = gen.next() {
+                println!("Found actions {:?}", goal_actions);
+                // If we are are on the second to last proposition
+                // layer, we are done
+                if (idx - 2) == 0 {
+                    plan.push(goal_actions.as_set());
+                    debug!("Found plan! {:?}", plan);
+                    success = true;
+                    break;
+                } else {
+                    plan.push(goal_actions.as_set());
+                    let next_goals = goal_actions.as_set().into_iter()
+                        .flat_map(|action| action.reqs)
+                        .unique()
+                        .collect();
+                    // Add this layer back into the queue incase we need to backtrack
+                    stack.push_front((idx, goals, Some(gen)));
+                    stack.push_front((idx - 2, next_goals, None));
+                };
+            } else {
+                debug!("Unable to find actions for goals {:?} from actions {:?}", goals, actions);
+                // Record the failed goals at level idx
+                failed_goals_memo.insert((idx, goals.clone()));
+                // Backtrack to previous layer and goalset or nothing
+                // (the next element in the queue)
+            }
+        };
+
+        if success {
+            // Since this solver goes from the last layer to the
+            // first, we need to reverse the plan
+            plan.reverse();
+            Some(plan)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod simple_solver_test {
+    use super::*;
 
     #[test]
     fn solver_works() {
@@ -348,11 +410,15 @@ mod simple_solver_test {
             hashset!{p2.clone().negate()},
         );
 
+        let goals = hashset!{
+            p1.clone().negate(),
+            p2.clone().negate(),
+            p3.clone()
+        };
+
         let mut pg = PlanGraph::new(
             hashset!{p1.clone(), p2.clone()},
-            hashset!{p1.clone().negate(),
-                     p2.clone().negate(),
-                     p3.clone()},
+            goals,
             hashset!{a1.clone(), a2.clone()}
         );
         pg.extend();
