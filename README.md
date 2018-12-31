@@ -57,6 +57,15 @@ fn integration() {
 }
 ```
 
+## Running benchmarks
+
+Benchmarks using `criterion` can be found in the `benches` directory. To run them:
+
+```
+cargo bench
+open target/criterion/report/index.html
+```
+
 ## License
 
 Copyright (c) Alex Kehayias. All rights reserved. The use and
