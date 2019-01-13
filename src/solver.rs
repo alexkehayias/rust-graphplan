@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet, BTreeSet, VecDeque};
 use log::{debug};
 use itertools::Itertools;
+use std::iter::FromIterator;
 use crate::proposition::Proposition;
 use crate::action::Action;
 use crate::pairset::{PairSet, pairs_from_sets};
@@ -317,17 +318,15 @@ mod goal_set_action_generator_test {
 }
 
 impl GraphPlanSolver for SimpleSolver {
-    fn search<>(&self, plangraph: &PlanGraph) -> Option<Solution> {
+    fn search(&self, plangraph: &PlanGraph) -> Option<Solution> {
         let mut success = false;
         let mut plan = Solution::new();
         let mut failed_goals_memo: HashSet<(usize, Vec<Proposition>)> = HashSet::new();
 
         // Initialize the loop
         let mut stack: VecDeque<(usize, Vec<Proposition>, Option<ActionCombinationIterator>)> = VecDeque::new();
-        let init_goals: Vec<Proposition> = plangraph.goals.clone()
-            .into_iter()
-            .collect();
-        let init_layer_idx = plangraph.layers.clone().len() - 1;
+        let init_goals = Vec::from_iter(plangraph.goals.clone());
+        let init_layer_idx = plangraph.layers.len() - 1;
         let init_action_gen = None;
         stack.push_front((init_layer_idx, init_goals, init_action_gen));
 

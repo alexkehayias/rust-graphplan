@@ -41,16 +41,13 @@ impl PlanGraph {
     /// Inserts another action layer and proposition layer
     pub fn extend(&mut self) {
         let length = self.layers.len();
-        if let Some(layer) = self.layers.last().cloned() {
+        if let Some(layer) = self.layers.last() {
             match layer {
                 Layer::ActionLayer(_) => {
                     panic!("Tried to extend a plangraph from an ActionLayer which is not allowed")
                 },
                 Layer::PropositionLayer(props) => {
                     let mutex_props = self.mutex_props.get(&(length - 1));
-                    let borrowed_all_actions: HashSet<&Action> = self.actions
-                        .iter()
-                        .collect();
                     let actions_no_mutex_reqs = mutex_props
                         .map(|mp| {
                             self.actions.iter()
@@ -59,13 +56,13 @@ impl PlanGraph {
                                         .collect::<Vec<_>>()
                                         .is_empty()
                                 })
-                                .collect::<HashSet<_>>()
+                                .collect::<HashSet<&Action>>()
                         })
-                        .unwrap_or(borrowed_all_actions.clone());
+                        .unwrap_or(self.actions.iter().collect());
 
                     let action_layer = Layer::from_layer(
                         actions_no_mutex_reqs,
-                        Layer::PropositionLayer(props)
+                        Layer::PropositionLayer(props.to_owned())
                     );
                     let action_layer_actions = match action_layer.clone() {
                         Layer::ActionLayer(action_data) => Some(action_data),
@@ -79,7 +76,7 @@ impl PlanGraph {
                     self.mutex_actions.insert(self.layers.len(), action_mutexes.clone());
 
                     let prop_layer = Layer::from_layer(
-                        borrowed_all_actions,
+                        self.actions.iter().collect(),
                         action_layer
                     );
                     let prop_layer_props = match prop_layer.clone() {
@@ -180,7 +177,7 @@ impl PlanGraph {
     where T: GraphPlanSolver {
         let mut tries = 0;
         let mut solution = None;
-        let max_tries = self.actions.clone().len() + 1;
+        let max_tries = self.actions.len() + 1;
 
         while tries < max_tries {
             // This doesn't provide early termination for _all_

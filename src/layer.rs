@@ -1,5 +1,4 @@
 use std::collections::{HashSet};
-use std::iter::FromIterator;
 use crate::proposition::Proposition;
 use crate::action::Action;
 use crate::pairset::{PairSet, pairs, pairs_from_sets};
@@ -32,12 +31,11 @@ impl Layer {
                 Layer::PropositionLayer(layer_data)
             },
             Layer::PropositionLayer(props) => {
-                let props_hash = HashSet::from_iter(props.iter().cloned());
                 let mut layer_data = ActionLayerData::new();
 
-                for a in all_actions.to_owned() {
+                for a in all_actions {
                     // Include action a if it satisfies props
-                    if a.reqs.is_subset(&props_hash) {
+                    if a.reqs.is_subset(&props) {
                         layer_data.insert(a.to_owned());
                     }
                 }
