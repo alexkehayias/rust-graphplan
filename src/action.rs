@@ -40,7 +40,11 @@ impl PartialOrd for Action {
 }
 
 impl Action {
-    pub fn new(name: String, reqs: HashSet<Proposition>, effects: HashSet<Proposition>) -> Action {
-        Action {name, reqs, effects}
+    pub fn new(name: String, reqs: HashSet<&Proposition>, effects: HashSet<&Proposition>) -> Action {
+        Action {
+            name: name,
+            reqs: reqs.into_iter().map(|i| i.to_owned()).collect(),
+            effects: effects.into_iter().map(|i| i.to_owned()).collect()
+        }
     }
 }

@@ -39,9 +39,9 @@ pub struct GraphPlan<T: GraphPlanSolver> {
 }
 
 impl<T: GraphPlanSolver> GraphPlan<T> {
-    pub fn new(initial_props: HashSet<Proposition>,
-           goals: HashSet<Proposition>,
-           actions: HashSet<Action>,
+    pub fn new(initial_props: HashSet<&Proposition>,
+           goals: HashSet<&Proposition>,
+           actions: HashSet<&Action>,
            solver: T) -> GraphPlan<T> {
         let pg = PlanGraph::new(initial_props, goals, actions);
         GraphPlan {
@@ -60,26 +60,36 @@ impl GraphPlan<SimpleSolver> {
         let st = fs::read_to_string(filepath).expect("Failed to read file");
         let config: Config = toml::from_str(&st).expect("Fail");
         let initial_props: HashSet<Proposition> = config.initial
-            .into_iter()
-            .map(|i| Proposition::new(i.clone(), i.starts_with("not_")))
+            .iter()
+            .map(|i| Proposition::new(i.to_owned(), i.starts_with("not_")))
             .collect();
         let goals: HashSet<Proposition> = config.goals
-            .into_iter()
-            .map(|i| Proposition::new(i.clone(), i.starts_with("not_")))
+            .iter()
+            .map(|i| Proposition::new(i.to_owned(), i.starts_with("not_")))
             .collect();
         let actions: HashSet<Action> = config.actions
-            .into_iter()
-            .map(|i| Action::new(
-                String::from(i.name),
-                i.reqs.iter()
+            .iter()
+            .map(|i| {
+                let reqs: HashSet<Proposition> = i.reqs.iter()
                     .map(|r| Proposition::new(r.clone(), r.starts_with("not_")))
-                    .collect(),
-                i.effects.iter()
+                    .collect();
+                let effects: HashSet<Proposition> = i.effects.iter()
                     .map(|e| Proposition::new(e.clone(), e.starts_with("not_")))
-                    .collect()))
+                    .collect();
+                Action::new(
+                    i.name.to_string(),
+                    reqs.iter().collect(),
+                    effects.iter().collect()
+                )
+            })
             .collect();
         let solver = SimpleSolver::new();
-        GraphPlan::new(initial_props.to_owned(), goals.to_owned(), actions.to_owned(), solver)
+        GraphPlan::new(
+            initial_props.iter().collect(),
+            goals.iter().collect(),
+            actions.iter().collect(),
+            solver
+        )
     }
 }
 
@@ -93,27 +103,27 @@ mod integration_test {
     #[test]
     fn integration() {
         let p1 = Proposition::from_str("tired");
+        let not_p1 = p1.negate();
         let p2 = Proposition::from_str("dog needs to pee");
+        let not_p2 = p2.negate();
         let p3 = Proposition::from_str("caffeinated");
 
         let a1 = Action::new(
             String::from("coffee"),
-            hashset!{p1.clone()},
-            hashset!{p3.clone(), p1.clone().negate()}
+            hashset!{&p1},
+            hashset!{&p3, &not_p1}
         );
 
         let a2 = Action::new(
             String::from("walk dog"),
-            hashset!{p2.clone(), p3.clone()},
-            hashset!{p2.clone().negate()},
+            hashset!{&p2, &p3},
+            hashset!{&not_p2},
         );
 
         let mut pg = GraphPlan::new(
-            hashset!{p1.clone(), p2.clone()},
-            hashset!{p1.clone().negate(),
-                     p2.clone().negate(),
-                     p3.clone()},
-            hashset!{a1.clone(), a2.clone()},
+            hashset!{&p1, &p2},
+            hashset!{&not_p1, &not_p2, &p3},
+            hashset!{&a1, &a2},
             SimpleSolver::new()
         );
         assert!(pg.search() != None, "Solution should not be None");

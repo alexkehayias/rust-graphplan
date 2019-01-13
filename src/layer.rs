@@ -45,8 +45,8 @@ impl Layer {
                     layer_data.insert(
                         Action::new(
                             format!("[maintain] {}{}", if p.negation {"¬"} else {""}, p.name),
-                            hashset!{p.clone()},
-                            hashset!{p.clone()},
+                            hashset!{p},
+                            hashset!{p},
                         )
                     );
                 }
@@ -192,8 +192,8 @@ mod from_layer_test {
             hashset!{
                 Action::new(
                     String::from("[maintain] test"),
-                    hashset!{prop.clone()},
-                    hashset!{prop.clone()}
+                    hashset!{&prop},
+                    hashset!{&prop}
                 )
             }
         );
@@ -231,30 +231,26 @@ mod mutex_test {
 
     #[test]
     fn proposition_mutexes_due_to_mutex_actions() {
-        let props = hashset!{
-            Proposition::from_str("caffeinated"),
-            Proposition::from_str("coffee"),
-        };
+        let p1 = Proposition::from_str("caffeinated");
+        let p2 = Proposition::from_str("coffee");
+        let not_p2 = p2.negate();
         let actions = hashset!{};
         let action_mutexes = hashset!{
             PairSet(
                 Action::new(
                     String::from("drink coffee"),
-                    hashset!{Proposition::from_str("coffee")},
-                    hashset!{Proposition::from_str("caffeinated"),
-                             Proposition::from_str("coffee").negate()},
+                    hashset!{&p2},
+                    hashset!{&p1, &not_p2},
                 ),
                 Action::new(
                     String::from("make coffee"),
                     hashset!{},
-                    hashset!{Proposition::from_str("coffee")},
+                    hashset!{&p2},
                 ),
             )
         };
-        let expected = hashset!{
-            PairSet(Proposition::from_str("caffeinated"),
-                    Proposition::from_str("coffee"))
-        };
+        let expected = hashset!{PairSet(p1.clone(), p2.clone())};
+        let props = hashset!{p1, p2};
         assert_eq!(
             expected,
             Layer::proposition_mutexes(props, actions, Some(action_mutexes))
@@ -263,16 +259,18 @@ mod mutex_test {
 
     #[test]
     fn action_mutexes_due_to_inconsistent_fx() {
+        let prop = Proposition::from_str("coffee");
+        let not_prop = prop.negate();
         let a1 = Action::new(
             String::from("drink coffee"),
             hashset!{},
-            hashset!{Proposition::from_str("coffee").negate()}
+            hashset!{&not_prop}
         );
 
         let a2 = Action::new(
             String::from("make coffee"),
             hashset!{},
-            hashset!{Proposition::from_str("coffee")}
+            hashset!{&prop}
         );
         let actions = hashset!{a1.clone(), a2.clone()};
         let props = MutexPairs::new();
@@ -286,16 +284,18 @@ mod mutex_test {
 
     #[test]
     fn action_mutexes_due_to_interference() {
+        let prop = Proposition::from_str("hungry");
+        let not_prop = prop.negate();
         let a1 = Action::new(
             String::from("eat sandwich"),
-            hashset!{Proposition::from_str("hungry")},
-            hashset!{Proposition::from_str("hungry").negate()}
+            hashset!{&prop},
+            hashset!{&not_prop}
         );
 
         let a2 = Action::new(
             String::from("eat soup"),
-            hashset!{Proposition::from_str("hungry")},
-            hashset!{Proposition::from_str("hungry").negate()}
+            hashset!{&prop},
+            hashset!{&not_prop}
         );
         let actions = hashset!{a1.clone(), a2.clone()};
         let props = MutexPairs::new();
@@ -309,25 +309,22 @@ mod mutex_test {
 
     #[test]
     fn action_mutexes_due_to_competing_needs() {
+        let prop = Proposition::from_str("hungry");
+        let not_prop = prop.negate();
         let a1 = Action::new(
             String::from("eat sandwich"),
-            hashset!{Proposition::from_str("hungry")},
-            hashset!{Proposition::from_str("hungry").negate()}
+            hashset!{&prop},
+            hashset!{&not_prop}
         );
 
         let a2 = Action::new(
             String::from("eat soup"),
-            hashset!{Proposition::from_str("hungry")},
-            hashset!{Proposition::from_str("hungry").negate()}
+            hashset!{&prop},
+            hashset!{&not_prop}
         );
         let actions = hashset!{a1.clone(), a2.clone()};
         let mut mutex_props = MutexPairs::new();
-        mutex_props.insert(
-            PairSet(
-                Proposition::from_str("hungry"),
-                Proposition::from_str("hungry").negate()
-            )
-        );
+        mutex_props.insert(PairSet(prop.clone(), prop.negate()));
         let actual = Layer::action_mutexes(actions, Some(&mutex_props));
 
         let mut expected = MutexPairs::new();

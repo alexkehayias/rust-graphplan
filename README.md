@@ -11,9 +11,16 @@ You can load a domain from a toml file (see the `resources/example.toml` directo
 Example:
 
 ```rust
-let path = String::from("resources/rocket_domain.toml");
-let mut pg: GraphPlan<SimpleSolver> = GraphPlan::from_toml(path);
-pg.search();
+#[macro_use] extern crate graphplan;
+use graphplan::GraphPlan;
+use graphplan::solver::SimpleSolver;
+use graphplan::plangraph::PlanGraph;
+
+fn main() -> () {
+    let path = String::from("resources/rocket_domain.toml");
+    let mut pg: GraphPlan<SimpleSolver> = GraphPlan::from_toml(path);
+    println!("Result: {:?}", PlanGraph::format_plan(pg.search()));
+}
 ```
 
 The lower level API allows you to constructing your own problem domain programmatically. You can also implement your own solver by implementing the `GraphPlanSolver` trait.
@@ -27,30 +34,31 @@ use graphplan::proposition::Proposition;
 use graphplan::action::Action;
 use graphplan::solver::SimpleSolver;
 
-#[test]
-fn integration() {
+fn main() -> () {
     let p1 = Proposition::from_str("tired");
+    let not_p1 = p1.negate();
+
     let p2 = Proposition::from_str("dog needs to pee");
+    let not_p2 = p2.negate();
+
     let p3 = Proposition::from_str("caffeinated");
 
     let a1 = Action::new(
         String::from("coffee"),
-        hashset!{p1.clone()},
-        hashset!{p3.clone(), p1.clone().negate()}
+        hashset!{&p1},
+        hashset!{&p3, &not_p1}
     );
 
     let a2 = Action::new(
         String::from("walk dog"),
-        hashset!{p2.clone(), p3.clone()},
-        hashset!{p2.clone().negate()},
+        hashset!{&p2, &p3},
+        hashset!{&not_p2},
     );
 
     let mut pg = GraphPlan::new(
-        hashset!{p1.clone(), p2.clone()},
-        hashset!{p1.clone().negate(),
-                 p2.clone().negate(),
-                 p3.clone()},
-        hashset!{a1.clone(), a2.clone()},
+        hashset!{&p1, &p2},
+        hashset!{&not_p1, &not_p2, &p3},
+        hashset!{&a1, &a2},
         SimpleSolver::new()
     );
     println!("Result: {:?}", PlanGraph::format_plan(pg.search());

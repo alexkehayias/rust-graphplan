@@ -218,8 +218,8 @@ mod goal_set_action_generator_test {
         let mut actions = BTreeSet::new();
         let a1 = Action::new(
             String::from("drink coffee"),
-            hashset!{p1.clone()},
-            hashset!{p2.clone()}
+            hashset!{&p1},
+            hashset!{&p2}
         );
         actions.insert(a1.clone());
         let mutexes = Some(MutexPairs::new());
@@ -241,15 +241,15 @@ mod goal_set_action_generator_test {
         let mut actions = BTreeSet::new();
         let a1 = Action::new(
             String::from("drink coffee"),
-            hashset!{p1.clone()},
-            hashset!{p2.clone()}
+            hashset!{&p1},
+            hashset!{&p2}
         );
         actions.insert(a1.clone());
 
         let a2 = Action::new(
             String::from("eat breakfast"),
-            hashset!{p3.clone()},
-            hashset!{p4.clone()}
+            hashset!{&p3},
+            hashset!{&p4}
         );
         actions.insert(a2.clone());
 
@@ -275,29 +275,29 @@ mod goal_set_action_generator_test {
 
         let a1 = Action::new(
             String::from("drink coffee"),
-            hashset!{p2.clone()},
-            hashset!{p3.clone()}
+            hashset!{&p2},
+            hashset!{&p3}
         );
         actions.insert(a1.clone());
 
         let a2 = Action::new(
             String::from("drink tea"),
-            hashset!{p1.clone()},
-            hashset!{p3.clone()}
+            hashset!{&p1},
+            hashset!{&p3}
         );
         actions.insert(a2.clone());
 
         let a3 = Action::new(
             String::from("eat scone"),
-            hashset!{p4.clone()},
-            hashset!{p6.clone()}
+            hashset!{&p4},
+            hashset!{&p6}
         );
         actions.insert(a3.clone());
 
         let a4 = Action::new(
             String::from("eat muffin"),
-            hashset!{p5.clone()},
-            hashset!{p6.clone()}
+            hashset!{&p5},
+            hashset!{&p6}
         );
         actions.insert(a4.clone());
 
@@ -394,31 +394,29 @@ mod simple_solver_test {
     #[test]
     fn solver_works() {
         let p1 = Proposition::from_str("tired");
+        let not_p1 = p1.negate();
         let p2 = Proposition::from_str("dog needs to pee");
+        let not_p2 = p2.negate();
         let p3 = Proposition::from_str("caffeinated");
 
         let a1 = Action::new(
             String::from("coffee"),
-            hashset!{p1.clone()},
-            hashset!{p3.clone(), p1.clone().negate()}
+            hashset!{&p1},
+            hashset!{&p3, &not_p1}
         );
 
         let a2 = Action::new(
             String::from("walk dog"),
-            hashset!{p2.clone(), p3.clone()},
-            hashset!{p2.clone().negate()},
+            hashset!{&p2, &p3},
+            hashset!{&not_p2},
         );
 
-        let goals = hashset!{
-            p1.clone().negate(),
-            p2.clone().negate(),
-            p3.clone()
-        };
+        let goals = hashset!{&not_p1, &not_p2, &p3};
 
         let mut pg = PlanGraph::new(
-            hashset!{p1.clone(), p2.clone()},
+            hashset!{&p1, &p2},
             goals,
-            hashset!{a1.clone(), a2.clone()}
+            hashset!{&a1, &a2}
         );
         pg.extend();
         pg.extend();

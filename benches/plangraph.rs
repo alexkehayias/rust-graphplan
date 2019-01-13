@@ -8,27 +8,29 @@ use graphplan::plangraph::PlanGraph;
 
 fn plangraph_benchmark(c: &mut Criterion) {
     let p1 = Proposition::from_str("tired");
+    let not_p1 = p1.negate();
+
     let p2 = Proposition::from_str("dog needs to pee");
+    let not_p2 = p2.negate();
+
     let p3 = Proposition::from_str("caffeinated");
 
     let a1 = Action::new(
         String::from("coffee"),
-        hashset!{p1.clone()},
-        hashset!{p3.clone()}
+        hashset!{&p1},
+        hashset!{&p3}
     );
     let a2 = Action::new(
         String::from("walk dog"),
-        hashset!{p2.clone(), p3.clone()},
-        hashset!{p2.clone().negate()},
+        hashset!{&p2, &p3},
+        hashset!{&not_p2},
     );
 
     c.bench_function("plangraph 100", move |b| b.iter(||{
         let mut pg = PlanGraph::new(
-            hashset!{p1.clone(), p2.clone(), p3.clone()},
-            hashset!{p1.clone().negate(),
-                     p2.negate().clone(),
-                     p3.clone()},
-            hashset!{a1.clone(), a2.clone()}
+            hashset!{&p1, &p2, &p3},
+            hashset!{&not_p1, &not_p2, &p3},
+            hashset!{&a1, &a2}
         );
         for _ in 0..100 {
             pg.extend();
