@@ -1,5 +1,6 @@
 use std::collections::{HashSet};
 use std::hash::{Hash, Hasher};
+use std::iter::FromIterator;
 
 
 #[derive(Debug, PartialOrd, Eq, Ord, Clone)]
@@ -47,14 +48,13 @@ mod pair_set_test {
 /// Returns the unique pairs of a set of items
 pub fn pairs<T: Eq + Hash + Clone + Ord>(items: &HashSet<T>) -> HashSet<PairSet<T>> {
     let mut accum = HashSet::new();
-
-    let mut sorted: Vec<T> = items.clone().into_iter().collect();
+    let mut sorted = Vec::from_iter(items.iter().cloned());
     sorted.sort();
 
-    for i in sorted.iter().cloned() {
-        for j in sorted.iter().cloned() {
+    for i in sorted.iter() {
+        for j in sorted.iter() {
             if i != j && j > i {
-                accum.insert(PairSet(i.clone(), j.clone()));
+                accum.insert(PairSet(i.to_owned(), j.to_owned()));
             }
         }
     }
@@ -67,16 +67,16 @@ pub fn pairs_from_sets<T: Eq + Hash + Clone + Ord>(items1: HashSet<T>,
                                                    -> HashSet<PairSet<T>> {
     let mut accum = HashSet::new();
 
-    let mut sorted1: Vec<T> = items1.into_iter().collect();
+    let mut sorted1 = Vec::from_iter(items1.into_iter());
     sorted1.sort();
 
-    let mut sorted2: Vec<T> = items2.into_iter().collect();
+    let mut sorted2 = Vec::from_iter(items2.into_iter());
     sorted2.sort();
 
-    for i in sorted1.iter().cloned() {
-        for j in sorted2.iter().cloned() {
+    for i in sorted1.iter() {
+        for j in sorted2.iter() {
             if i != j && j > i {
-                accum.insert(PairSet(i.clone(), j.clone()));
+                accum.insert(PairSet(i.to_owned(), j.to_owned()));
             }
         }
     }
