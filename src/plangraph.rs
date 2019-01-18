@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet, BTreeSet};
 use log::{debug};
 use crate::proposition::Proposition;
 use crate::action::Action;
-use crate::pairset::{pairs};
+use crate::pairset::{pairs, PairSet};
 use crate::solver::GraphPlanSolver;
 use crate::layer::{Layer, MutexPairs};
 
@@ -36,7 +36,7 @@ impl PlanGraph {
     }
 
     pub fn push(&mut self, layer: Layer) {
-        self.layers.push(layer.clone())
+        self.layers.push(layer)
     }
 
     /// Extends the plangraph to depth i+1
@@ -62,36 +62,45 @@ impl PlanGraph {
                         })
                         .unwrap_or(self.actions.iter().collect());
 
+                    let p_layer = Layer::PropositionLayer(props.to_owned());
                     let action_layer = Layer::from_layer(
                         actions_no_mutex_reqs,
-                        Layer::PropositionLayer(props.to_owned())
+                        &p_layer
                     );
-                    let action_layer_actions = match action_layer.clone() {
-                        Layer::ActionLayer(action_data) => Some(action_data),
-                        _ => None
+                    let action_layer_actions: HashSet<&Action> = match &action_layer {
+                        Layer::ActionLayer(action_data) => action_data.iter().collect(),
+                        _ => unreachable!("Tried to get actions from PropositionLayer")
                     };
                     let action_mutexes = Layer::action_mutexes(
-                        action_layer_actions.clone().unwrap(),
+                        &action_layer_actions,
                         mutex_props
                     );
-                    self.layers.push(action_layer.clone());
-                    self.mutex_actions.insert(self.layers.len(), action_mutexes.clone());
+                    self.mutex_actions.insert(
+                        self.layers.len(),
+                        action_mutexes.clone()
+                            .into_iter()
+                            .map(|i| {
+                                let PairSet(a, b) = i;
+                                PairSet(a.to_owned(), b.to_owned())
+                            })
+                            .collect()
+                    );
 
                     let prop_layer = Layer::from_layer(
                         self.actions.iter().collect(),
-                        action_layer
+                        &action_layer
                     );
-                    let prop_layer_props = match prop_layer.clone() {
+                    let prop_layer_props = match &prop_layer {
                         Layer::PropositionLayer(prop_data) => Some(prop_data),
-                        _ => None
+                        _ => unreachable!("Tried to get propositions from ActionLayerr")
                     };
                     let prop_mutexes = Layer::proposition_mutexes(
                         // This shouldn't fail
-                        prop_layer_props.unwrap(),
-                        // This shouldn't fail
-                        action_layer_actions.unwrap(),
-                        Some(action_mutexes)
+                        &prop_layer_props.unwrap(),
+                        &action_layer_actions,
+                        Some(&action_mutexes)
                     );
+                    self.layers.push(action_layer);
                     self.layers.push(prop_layer);
                     self.mutex_props.insert(self.layers.len(), prop_mutexes.clone());
                 }

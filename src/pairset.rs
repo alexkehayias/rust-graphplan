@@ -25,6 +25,13 @@ impl <T> PartialEq for PairSet<T> where T: Ord + Clone{
     }
 }
 
+impl<T> PairSet<T> where T: Ord + PartialEq + Eq + Clone {
+    pub fn to_owned(&self) -> PairSet<T>{
+        let PairSet(a, b) = self;
+        PairSet(a.to_owned(), b.to_owned())
+    }
+}
+
 #[cfg(test)]
 mod pair_set_test {
     use super::*;
