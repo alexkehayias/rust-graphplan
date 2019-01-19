@@ -4,7 +4,7 @@ use itertools::Itertools;
 use std::iter::FromIterator;
 use crate::proposition::Proposition;
 use crate::action::Action;
-use crate::pairset::{PairSet, pairs_from_sets};
+use crate::pairset::{pairs_from_sets};
 use crate::layer::{MutexPairs};
 use crate::plangraph::{PlanGraph, Solution};
 
@@ -94,7 +94,6 @@ impl Iterator for ActionCombinationIterator {
     fn next(&mut self) -> Option<Self::Item> {
         let goals = &self.meta.goals;
         let actions = &self.meta.actions;
-        let mutexes = &self.meta.mutexes;
         let goal_len = goals.len();
 
         let mut stack = VecDeque::new();
@@ -102,7 +101,6 @@ impl Iterator for ActionCombinationIterator {
         // If the goals have already been met, we need to look for a
         // new combination that also meets the goals
         if self.goals_met {
-            debug!("Resuming action combination generator: {:?}", self.clone());
             // Remove the previous action used to satisfy the last
             // goal and start the loop from the last goal. This will
             // yield a new combination or recursively back track.
@@ -119,7 +117,6 @@ impl Iterator for ActionCombinationIterator {
                 acts.to_owned()
             } else {
                 let goal = &goals[goal_idx];
-                debug!("Looking for action for goal {:?} in {:?}", goal, actions.clone());
                 let mut available = BTreeSet::new();
                 // Only actions that produce the goal and are not
                 // mutex with any other actions and have not
@@ -146,17 +143,12 @@ impl Iterator for ActionCombinationIterator {
                         hashset!{a.clone()},
                         ActionCombination(acts).as_set()
                     );
-                    let action_mutexes: Vec<PairSet<Action>> = mutexes
-                        .clone()
-                        .unwrap_or(HashSet::new())
-                        .intersection(&pairs)
-                        .into_iter()
-                        .cloned()
-                        .collect();
 
-                    if action_mutexes.is_empty() {
-                        available.insert(a.clone());
-                    }
+                    if let Some(muxes) = &self.meta.mutexes {
+                        if muxes.intersection(&pairs).collect::<Vec<_>>().is_empty() {
+                            available.insert(a.clone());
+                        }
+                    };
                 };
                 available
             };
@@ -176,7 +168,6 @@ impl Iterator for ActionCombinationIterator {
                 // Add the action to the plan and continue
                 let next_action = available_actions.iter().next().unwrap();
                 self.accum.insert(goal_idx, next_action.clone());
-                debug!("Selected action {:?}", next_action.clone());
 
                 // Add to previous attempts in case we need to backtrack
                 let mut remaining_actions = available_actions.clone();
