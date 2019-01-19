@@ -40,6 +40,15 @@ log = "0.4"
 toml = "0.4.2"
 serde = "1.0"
 serde_derive = "1.0"
+stdweb = "0.4.13"
+
+[lib]
+name = "graphplan"
+path = "src/lib.rs"
+
+[[bin]]
+name = "graphplan-web"
+path = "src/main.rs"
 
 [[bench]]
 name = "plangraph"
