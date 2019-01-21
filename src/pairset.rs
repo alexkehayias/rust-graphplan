@@ -60,7 +60,7 @@ pub fn pairs<T: Eq + Hash + Clone + Ord>(items: &HashSet<T>) -> HashSet<PairSet<
 
     for i in sorted.iter() {
         for j in sorted.iter() {
-            if i != j && j > i {
+            if i != j {
                 accum.insert(PairSet(i.to_owned(), j.to_owned()));
             }
         }
@@ -82,7 +82,7 @@ pub fn pairs_from_sets<T: Eq + Hash + Clone + Ord>(items1: HashSet<T>,
 
     for i in sorted1.iter() {
         for j in sorted2.iter() {
-            if i != j && j > i {
+            if i != j {
                 accum.insert(PairSet(i.to_owned(), j.to_owned()));
             }
         }
@@ -93,6 +93,8 @@ pub fn pairs_from_sets<T: Eq + Hash + Clone + Ord>(items1: HashSet<T>,
 #[cfg(test)]
 mod pairs_test {
     use super::*;
+    use crate::action::Action;
+    use crate::proposition::Proposition;
 
     #[test]
     fn yields_unique_pairs_only() {
@@ -110,6 +112,47 @@ mod pairs_test {
     #[test]
     fn yields_unique_pairs_from_sets() {
         assert_eq!(pairs_from_sets(hashset!{1, 2}, hashset!{3}),
-                   hashset!{PairSet(1, 3), PairSet(2, 3)})
+                   hashset!{PairSet(1, 3), PairSet(2, 3)});
+
+        assert_eq!(pairs_from_sets(hashset!{1}, hashset!{1, 2}),
+                   hashset!{PairSet(1, 2)});
+
+        assert_eq!(pairs_from_sets(hashset!{}, hashset!{1, 2}),
+                   hashset!{});
+    }
+
+    #[test]
+    fn yields_unique_pairs_from_sets_of_actions() {
+        let p1 = Proposition::from_str("tired");
+        let not_p1 = p1.negate();
+        let p2 = Proposition::from_str("dog needs to pee");
+        let not_p2 = p2.negate();
+        let p3 = Proposition::from_str("caffeinated");
+
+        let a1 = Action::new(
+            String::from("coffee"),
+            hashset!{&p1},
+            hashset!{&p3, &not_p1}
+        );
+        let a2 = Action::new(
+            String::from("walk dog"),
+            hashset!{&p2, &p3},
+            hashset!{&not_p2},
+        );
+        let a3 = Action::new(
+            String::from("[maintain] ¬tired"),
+            hashset!{&not_p1},
+            hashset!{&not_p1},
+        );
+
+        assert_eq!(
+            pairs_from_sets(hashset!{a1.clone()}, hashset!{a2.clone()}),
+            hashset!{PairSet(a1.clone(), a2.clone())}
+        );
+
+        assert_eq!(
+            pairs_from_sets(hashset!{a3.clone()}, hashset!{a2.clone()}),
+            hashset!{PairSet(a3, a2)}
+        );
     }
 }

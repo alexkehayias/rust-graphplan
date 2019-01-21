@@ -56,25 +56,28 @@ impl<T: GraphPlanSolver> GraphPlan<T> {
 }
 
 impl GraphPlan<SimpleSolver> {
-    pub fn from_toml(filepath: String) -> GraphPlan<SimpleSolver> {
-        let st = fs::read_to_string(filepath).expect("Failed to read file");
-        let config: Config = toml::from_str(&st).expect("Fail");
+    pub fn from_toml_string(string: String) -> GraphPlan<SimpleSolver> {
+        let config: Config = toml::from_str(&string).expect("Fail");
         let initial_props: HashSet<Proposition> = config.initial
             .iter()
-            .map(|i| Proposition::new(i.to_owned(), i.starts_with("not_")))
+            .map(|i| Proposition::new(i.to_owned().replace("not_", ""),
+                                      i.starts_with("not_")))
             .collect();
         let goals: HashSet<Proposition> = config.goals
             .iter()
-            .map(|i| Proposition::new(i.to_owned(), i.starts_with("not_")))
+            .map(|i| Proposition::new(i.to_owned().replace("not_", ""),
+                                      i.starts_with("not_")))
             .collect();
         let actions: HashSet<Action> = config.actions
             .iter()
             .map(|i| {
                 let reqs: HashSet<Proposition> = i.reqs.iter()
-                    .map(|r| Proposition::new(r.clone(), r.starts_with("not_")))
+                    .map(|r| Proposition::new(r.clone().replace("not_", ""),
+                                              r.starts_with("not_")))
                     .collect();
                 let effects: HashSet<Proposition> = i.effects.iter()
-                    .map(|e| Proposition::new(e.clone(), e.starts_with("not_")))
+                    .map(|e| Proposition::new(e.clone().replace("not_", ""),
+                                              e.starts_with("not_")))
                     .collect();
                 Action::new(
                     i.name.to_string(),
@@ -90,6 +93,11 @@ impl GraphPlan<SimpleSolver> {
             actions.iter().collect(),
             solver
         )
+    }
+
+    pub fn from_toml(filepath: String) -> GraphPlan<SimpleSolver> {
+        let string = fs::read_to_string(filepath).expect("Failed to read file");
+        GraphPlan::from_toml_string(string)
     }
 }
 

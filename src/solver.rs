@@ -117,6 +117,7 @@ impl Iterator for ActionCombinationIterator {
                 acts.to_owned()
             } else {
                 let goal = &goals[goal_idx];
+                debug!("Working on goal {:?}", goal);
                 let mut available = BTreeSet::new();
                 // Only actions that produce the goal and are not
                 // mutex with any other actions and have not
@@ -130,6 +131,8 @@ impl Iterator for ActionCombinationIterator {
                         continue
                     };
 
+                    // Early break if we already know this action
+                    // works for the goal from previous attempts
                     if self.accum.get(&goal_idx).map(|i| i == a).unwrap_or(false) {
                         available.insert(a.clone());
                         break
@@ -137,12 +140,15 @@ impl Iterator for ActionCombinationIterator {
 
                     // Check if this action is mutex with any of
                     // the other accumulated actions
-                    let mut acts = self.accum.clone();
-                    acts.insert(goal_idx, a.clone());
+                    let acts = self.accum.clone();
+                    debug!("pairs_from_sets {:?}, {:?}",
+                             hashset!{a.clone()},
+                             ActionCombination(acts.clone()).as_set());
                     let pairs = pairs_from_sets(
                         hashset!{a.clone()},
                         ActionCombination(acts).as_set()
                     );
+                    debug!("Checking pairs: {:?} against mutexes: {:?}", pairs, &self.meta.mutexes);
 
                     if let Some(muxes) = &self.meta.mutexes {
                         if muxes.intersection(&pairs).collect::<Vec<_>>().is_empty() {
@@ -165,8 +171,8 @@ impl Iterator for ActionCombinationIterator {
                 // Backtrack to the previous goal
                 stack.push_front((goal_idx - 1,));
             } else {
-                // Add the action to the plan and continue
                 let next_action = available_actions.iter().next().unwrap();
+                // TODO only add the action if the goal isn't met yet
                 self.accum.insert(goal_idx, next_action.clone());
 
                 // Add to previous attempts in case we need to backtrack
@@ -178,6 +184,9 @@ impl Iterator for ActionCombinationIterator {
                 // this action staisfies more than one
                 // goal. Otherwise, the speed of finding a solution is
                 // dependent on the ordering of goals
+                // From the paper: no action can be
+                // removed from A so that the add effects of the
+                // actions remaining still contain G
 
                 // Proceed to the next goal
                 if goal_idx < goal_len - 1 {
@@ -344,11 +353,13 @@ impl GraphPlanSolver for SimpleSolver {
                 // If we are are on the second to last proposition
                 // layer, we are done
                 if (idx - 2) == 0 {
+                    debug!("Actions: {:?}", goal_actions.as_set());
                     plan.push(goal_actions.as_set());
                     debug!("Found plan! {:?}", plan);
                     success = true;
                     break;
                 } else {
+                    debug!("Actions: {:?}", goal_actions.as_set());
                     plan.push(goal_actions.as_set());
                     let next_goals = goal_actions.as_set().into_iter()
                         .flat_map(|action| action.reqs)
@@ -359,9 +370,13 @@ impl GraphPlanSolver for SimpleSolver {
                     stack.push_front((idx - 2, next_goals, None));
                 };
             } else {
-                debug!("Unable to find actions for goals {:?} from actions {:?}", goals, actions);
+                debug!("Unable to find actions for goals {:?} from actions {:?}",
+                       goals, actions);
                 // Record the failed goals at level idx
                 failed_goals_memo.insert((idx, goals.clone()));
+                // Remove the last step in the plan from which this
+                // set of goals comes from
+                plan.pop();
                 // Backtrack to previous layer and goalset or nothing
                 // (the next element in the queue)
             }

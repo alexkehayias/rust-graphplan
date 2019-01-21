@@ -13,7 +13,6 @@ pub struct Action {
 
 impl fmt::Debug for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // write!(f, "A:{} {{req: {:?} effects: {:?}}}", self.name, self.reqs, self.effects)
         write!(f, "A:{}", self.name)
     }
 }
