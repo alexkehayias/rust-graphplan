@@ -47,7 +47,7 @@ name = "graphplan"
 path = "src/lib.rs"
 
 [[bin]]
-name = "graphplan-web"
+name = "graphplan-demo"
 path = "src/main.rs"
 
 [[bench]]
