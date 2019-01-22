@@ -1,0 +1,22 @@
+# You can modify this toml file with your own planning
+# domain and run Graphplan to get your plan! Propositions
+# are specified as strings with no spaces. You can negate
+# a proposition by prefixing it with 'not_'
+
+# The initial propositions
+initial = [
+  "tired",
+  "dog_needs_to_pee",
+]
+# What we want the end propositions to be
+goals = [
+  "at_the_office",
+]
+# Actions that change propositions—they have required
+# propositions and output effects (propositions)
+actions = [
+  { name = "Make coffee", reqs = [], effects = ["coffee"] },
+  { name = "Drink coffee", reqs = ["tired", "coffee"], effects = ["not_coffee", "not_tired"] },
+  { name = "Walk dog", reqs = ["not_tired", "dog_needs_to_pee"], effects = ["not_dog_needs_to_pee"] },
+  { name = "Commute", reqs = ["not_tired", "not_dog_needs_to_pee"], effects = ["at_the_office"] },
+]
