@@ -74,6 +74,16 @@ cargo bench
 open target/criterion/report/index.html
 ```
 
+## Running the wasm demo
+
+This crate ships with a demo of running graphplan in the browser via wasm. To run it you will need to install the `cargo-web` plugin.
+
+```
+cargo web --features="demo"
+open localhost:8000
+```
+Then in the js console, the method `graphplan.run` will take a toml formatted string (see `resources/example.toml`) and return a plan if there is one.
+
 ## License
 
 Copyright (c) Alex Kehayias. All rights reserved. The use and
