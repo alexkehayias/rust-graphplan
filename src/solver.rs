@@ -417,12 +417,12 @@ mod simple_solver_test {
             hashset!{&not_p2},
         );
 
-        let goals = hashset!{&not_p1, &not_p2, &p3};
+        let goals = hashset!{not_p1, not_p2, p3};
 
         let mut pg = PlanGraph::new(
-            hashset!{&p1, &p2},
+            hashset!{p1, p2},
             goals,
-            hashset!{&a1, &a2}
+            hashset!{a1.clone(), a2.clone()}
         );
         pg.extend();
         pg.extend();

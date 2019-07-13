@@ -13,10 +13,11 @@ pub mod solver;
 mod layer;
 mod pairset;
 
-use crate::proposition::Proposition;
-use crate::action::Action;
-use crate::plangraph::{PlanGraph, Solution};
-use crate::solver::{GraphPlanSolver, SimpleSolver};
+pub use crate::proposition::Proposition;
+pub use crate::action::Action;
+pub use crate::plangraph::{PlanGraph, Solution};
+pub use crate::solver::{GraphPlanSolver, SimpleSolver};
+
 
 #[derive(Deserialize)]
 struct Config {
@@ -32,17 +33,16 @@ struct ConfigAction {
     effects: Vec<String>,
 }
 
-
 pub struct GraphPlan<T: GraphPlanSolver> {
     pub solver: T,
     pub plangraph: PlanGraph,
 }
 
 impl<T: GraphPlanSolver> GraphPlan<T> {
-    pub fn new(initial_props: HashSet<&Proposition>,
-           goals: HashSet<&Proposition>,
-           actions: HashSet<&Action>,
-           solver: T) -> GraphPlan<T> {
+    pub fn new(initial_props: HashSet<Proposition>,
+               goals: HashSet<Proposition>,
+               actions: HashSet<Action>,
+               solver: T) -> GraphPlan<T> {
         let pg = PlanGraph::new(initial_props, goals, actions);
         GraphPlan {
             solver: solver,
@@ -88,9 +88,9 @@ impl GraphPlan<SimpleSolver> {
             .collect();
         let solver = SimpleSolver::new();
         GraphPlan::new(
-            initial_props.iter().collect(),
-            goals.iter().collect(),
-            actions.iter().collect(),
+            initial_props,
+            goals,
+            actions,
             solver
         )
     }
@@ -129,9 +129,9 @@ mod integration_test {
         );
 
         let mut pg = GraphPlan::new(
-            hashset!{&p1, &p2},
-            hashset!{&not_p1, &not_p2, &p3},
-            hashset!{&a1, &a2},
+            hashset!{p1, p2},
+            hashset!{not_p1, not_p2, p3},
+            hashset!{a1, a2},
             SimpleSolver::new()
         );
         assert!(pg.search() != None, "Solution should not be None");

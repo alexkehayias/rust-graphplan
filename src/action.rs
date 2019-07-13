@@ -1,7 +1,7 @@
 use std::fmt;
 use std::cmp::{Ordering};
 use std::hash::{Hash, Hasher};
-use std::collections::{HashSet};
+use std::collections::{HashSet, HashMap};
 use crate::proposition::Proposition;
 
 #[derive(Eq, PartialEq, Clone)]
@@ -9,6 +9,7 @@ pub struct Action {
     pub name: String,
     pub reqs: HashSet<Proposition>,
     pub effects: HashSet<Proposition>,
+    pub data: HashMap<String, String>
 }
 
 impl fmt::Debug for Action {
@@ -43,7 +44,13 @@ impl Action {
         Action {
             name: name,
             reqs: reqs.into_iter().map(|i| i.to_owned()).collect(),
-            effects: effects.into_iter().map(|i| i.to_owned()).collect()
+            effects: effects.into_iter().map(|i| i.to_owned()).collect(),
+            data: HashMap::new()
         }
+    }
+
+    pub fn with_data(&mut self, data: HashMap<String, String>) -> &mut Self {
+        self.data = data;
+        self
     }
 }

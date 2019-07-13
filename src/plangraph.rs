@@ -21,14 +21,13 @@ pub struct PlanGraph {
 }
 
 impl PlanGraph {
-    pub fn new(initial_props: HashSet<&Proposition>,
-               goals: HashSet<&Proposition>,
-               actions: HashSet<&Action>) -> Self {
-        let owned_init_props = initial_props.into_iter().cloned().collect();
-        let init_layer = Layer::PropositionLayer(owned_init_props);
+    pub fn new(initial_props: HashSet<Proposition>,
+               goals: HashSet<Proposition>,
+               actions: HashSet<Action>) -> Self {
+        let init_layer = Layer::PropositionLayer(initial_props);
         PlanGraph {
-            goals: goals.into_iter().cloned().collect(),
-            actions: actions.into_iter().cloned().collect(),
+            goals: goals,
+            actions: actions,
             layers: vec![init_layer],
             mutex_props: HashMap::new(),
             mutex_actions: HashMap::new()
