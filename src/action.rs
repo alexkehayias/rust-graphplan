@@ -1,56 +1,93 @@
-use std::fmt;
 use std::cmp::{Ordering};
 use std::hash::{Hash, Hasher};
 use std::collections::{HashSet, HashMap};
 use crate::proposition::Proposition;
 
-#[derive(Eq, PartialEq, Clone)]
-pub struct Action {
-    pub name: String,
+#[derive(Hash, Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
+pub enum ActionType<ActionId> {
+    Action(ActionId),
+    Maintenance(ActionId)
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Action<ActionId: Hash + Clone> {
+    pub id: ActionType<ActionId>,
     pub reqs: HashSet<Proposition>,
     pub effects: HashSet<Proposition>,
-    pub data: HashMap<String, String>
 }
 
-impl fmt::Debug for Action {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "A:{}", self.name)
-    }
-}
-
-/// Actions are hashed based on their name, that means you can't have
-/// two actions of the same name in a HashSet even if they have
+/// Actions are hashed based on their id, that means you can't have
+/// two actions of the same id in a HashSet even if they have
 /// different reqs and effects
-impl Hash for Action {
+impl<ActionId: Hash + Clone> Hash for Action<ActionId> {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
-        self.name.hash(state);
+        self.id.hash(state);
     }
 }
 
-impl Ord for Action {
+impl<ActionId: Ord + Clone + Hash> Ord for Action<ActionId> {
     fn cmp(&self, other: &Self) -> Ordering {
-        (self.name).cmp(&(other.name))
+        (self.id).cmp(&(other.id))
     }
 }
 
-impl PartialOrd for Action {
+impl<ActionId: Hash + Ord + Clone> PartialOrd for Action<ActionId> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Action {
-    pub fn new(name: String, reqs: HashSet<&Proposition>, effects: HashSet<&Proposition>) -> Action {
+impl<ActionId: Hash + Clone> Action<ActionId> {
+    pub fn new(id: ActionId, reqs: HashSet<&Proposition>, effects: HashSet<&Proposition>) -> Action<ActionId> {
         Action {
-            name: name,
+            id: ActionType::Action(id),
             reqs: reqs.into_iter().map(|i| i.to_owned()).collect(),
             effects: effects.into_iter().map(|i| i.to_owned()).collect(),
-            data: HashMap::new()
         }
     }
 
-    pub fn with_data(&mut self, data: HashMap<String, String>) -> &mut Self {
-        self.data = data;
-        self
+    pub fn get_action(&self) -> &ActionId {
+        match &self.id {
+            ActionType::Action(action) => action,
+            ActionType::Maintenance(action) => action
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_action {
+    use super::*;
+
+
+    #[derive(Debug, Hash, Clone, Eq, PartialEq)]
+    enum TestActionId {
+        A,
+        B,
+    }
+
+    #[test]
+    fn test_action() {
+        let a = Action::new(TestActionId::A, hashset!{}, hashset!{});
+        let a2 = Action::new(TestActionId::A, hashset!{}, hashset!{});
+
+        // The same ActionId value results in the same internal ID
+        assert_eq!(a, a2);
+
+        // Making a set from duplicate actions removes dupes
+        let set = hashset!{a.clone(), a2};
+        assert_eq!(set.len(), 1);
+
+        // Actions with different ActionId are not equal
+        let b = Action::new(TestActionId::B, hashset!{}, hashset!{});
+        assert_ne!(a, b.clone());
+
+        // Maintenance actions for the same ActionId are not equal
+        let b2 = Action {
+            id: ActionType::Maintenance(TestActionId::B),
+            reqs: hashset!{},
+            effects: hashset!{},
+        };
+
+        assert_ne!(b, b2);
     }
 }
