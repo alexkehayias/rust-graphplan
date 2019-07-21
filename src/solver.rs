@@ -1,7 +1,9 @@
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::iter::FromIterator;
 use std::collections::{HashMap, HashSet, BTreeSet, VecDeque};
 use log::{debug};
 use itertools::Itertools;
-use std::iter::FromIterator;
 use crate::proposition::Proposition;
 use crate::action::Action;
 use crate::pairset::{pairs_from_sets};
@@ -9,10 +11,10 @@ use crate::layer::{MutexPairs};
 use crate::plangraph::{PlanGraph, Solution};
 
 
-pub trait GraphPlanSolver {
+pub trait GraphPlanSolver<ActionId: Hash + Ord + Clone + Debug> {
     /// Searches a plangraph for a sequence of collection of actions
     /// that satisfy the goals
-    fn search(&self, plangraph: &PlanGraph) -> Option<Solution>;
+    fn search(&self, plangraph: &PlanGraph<ActionId>) -> Option<Solution<ActionId>>;
 }
 
 pub struct SimpleSolver;
@@ -24,45 +26,48 @@ impl SimpleSolver {
 }
 
 type GoalIndex = usize;
-type Attempts = HashMap<usize, BTreeSet<Action>>;
+type Attempts<ActionId> = HashMap<usize, BTreeSet<Action<ActionId>>>;
 
 #[derive(Clone, Debug, PartialEq)]
-struct ActionCombination(HashMap<GoalIndex, Action>);
+struct ActionCombination<ActionId: Hash + PartialEq + Debug + Clone>(
+    HashMap<GoalIndex, Action<ActionId>>
+);
 
-impl ActionCombination {
-    pub fn as_set(&self) -> HashSet<Action> {
+impl<ActionId: Clone + Hash + Eq + Debug> ActionCombination<ActionId> {
+    pub fn as_set(&self) -> HashSet<Action<ActionId>> {
         self.0.values()
             .cloned()
             .into_iter()
-            .collect::<HashSet<Action>>()
+            .collect()
     }
 
-    pub fn as_vec(&self) -> Vec<Action> {
+    pub fn as_vec(&self) -> Vec<Action<ActionId>> {
         self.0.values()
             .cloned()
             .into_iter()
-            .collect::<Vec<Action>>()
+            .collect()
     }
 }
 
 #[derive(Clone, Debug)]
-struct GoalSetActionGenerator {
+struct GoalSetActionGenerator<ActionId: Debug + Hash + Clone + Eq + Ord> {
     goals: Vec<Proposition>,
-    actions: BTreeSet<Action>,
-    mutexes: Option<MutexPairs<Action>>,
+    actions: BTreeSet<Action<ActionId>>,
+    mutexes: Option<MutexPairs<Action<ActionId>>>,
 }
 
-impl GoalSetActionGenerator {
+impl<ActionId: Ord + Clone + Hash + Debug> GoalSetActionGenerator<ActionId> {
     pub fn new(goals: Vec<Proposition>,
-               actions: BTreeSet<Action>,
-               mutexes: Option<MutexPairs<Action>>,) -> GoalSetActionGenerator {
+               actions: BTreeSet<Action<ActionId>>,
+               mutexes: Option<MutexPairs<Action<ActionId>>>,)
+               -> GoalSetActionGenerator<ActionId> {
         GoalSetActionGenerator {goals, actions, mutexes}
     }
 }
 
-impl IntoIterator for GoalSetActionGenerator {
-    type Item = ActionCombination;
-    type IntoIter = ActionCombinationIterator;
+impl<ActionId: Ord + Clone + Hash + Debug> IntoIterator for GoalSetActionGenerator<ActionId> {
+    type Item = ActionCombination<ActionId>;
+    type IntoIter = ActionCombinationIterator<ActionId>;
 
     fn into_iter(self) -> Self::IntoIter {
         ActionCombinationIterator::new(self)
@@ -70,15 +75,15 @@ impl IntoIterator for GoalSetActionGenerator {
 }
 
 #[derive(Clone, Debug)]
-struct ActionCombinationIterator {
-    meta: GoalSetActionGenerator, // defines goals we are trying achieve
-    attempts: Attempts, // previous attempts to meet a goal
+struct ActionCombinationIterator<ActionId: Ord + Clone + Hash + Debug> {
+    meta: GoalSetActionGenerator<ActionId>, // defines goals we are trying achieve
+    attempts: Attempts<ActionId>, // previous attempts to meet a goal
     goals_met: bool, // flag indicating all goals are met or restart
-    accum: HashMap<GoalIndex, Action> // combination of actions
+    accum: HashMap<GoalIndex, Action<ActionId>> // combination of actions
 }
 
-impl ActionCombinationIterator {
-    pub fn new(action_combinations: GoalSetActionGenerator) -> ActionCombinationIterator {
+impl<ActionId: Ord + Debug + Hash + Clone> ActionCombinationIterator<ActionId> {
+    pub fn new(action_combinations: GoalSetActionGenerator<ActionId>) -> ActionCombinationIterator<ActionId> {
         ActionCombinationIterator {
             meta: action_combinations,
             attempts: Attempts::new(),
@@ -88,8 +93,8 @@ impl ActionCombinationIterator {
     }
 }
 
-impl Iterator for ActionCombinationIterator {
-    type Item = ActionCombination;
+impl<ActionId: Ord + Clone + Hash + Debug + PartialEq> Iterator for ActionCombinationIterator<ActionId> {
+    type Item = ActionCombination<ActionId>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let goals = &self.meta.goals;
@@ -141,9 +146,6 @@ impl Iterator for ActionCombinationIterator {
                     // Check if this action is mutex with any of
                     // the other accumulated actions
                     let acts = self.accum.clone();
-                    debug!("pairs_from_sets {:?}, {:?}",
-                             hashset!{a.clone()},
-                             ActionCombination(acts.clone()).as_set());
                     let pairs = pairs_from_sets(
                         hashset!{a.clone()},
                         ActionCombination(acts).as_set()
@@ -309,7 +311,7 @@ mod goal_set_action_generator_test {
             vec![a2.clone(), a3.clone()],
         ];
         let generator = GoalSetActionGenerator::new(goals, actions, mutexes);
-        let actual: Vec<Vec<Action>> = generator.into_iter()
+        let actual: Vec<Vec<Action<String>>> = generator.into_iter()
             .map(|combo| {let mut i = combo.as_vec(); i.sort(); i})
             .collect();
 
@@ -317,14 +319,14 @@ mod goal_set_action_generator_test {
     }
 }
 
-impl GraphPlanSolver for SimpleSolver {
-    fn search(&self, plangraph: &PlanGraph) -> Option<Solution> {
+impl<ActionId: Ord + Clone + Hash + Debug> GraphPlanSolver<ActionId> for SimpleSolver {
+    fn search(&self, plangraph: &PlanGraph<ActionId>) -> Option<Solution<ActionId>> {
         let mut success = false;
-        let mut plan = Solution::new();
+        let mut plan = Vec::new();
         let mut failed_goals_memo: HashSet<(usize, Vec<Proposition>)> = HashSet::new();
 
         // Initialize the loop
-        let mut stack: VecDeque<(usize, Vec<Proposition>, Option<ActionCombinationIterator>)> = VecDeque::new();
+        let mut stack: VecDeque<(usize, Vec<Proposition>, Option<ActionCombinationIterator<ActionId>>)> = VecDeque::new();
         let init_goals = Vec::from_iter(plangraph.goals.clone());
         let init_layer_idx = plangraph.layers.len() - 1;
         let init_action_gen = None;
@@ -349,17 +351,15 @@ impl GraphPlanSolver for SimpleSolver {
                 .unwrap();
 
             if let Some(goal_actions) = gen.next() {
-                debug!("Found actions {:?}", goal_actions);
+                debug!("Actions: {:?} for goals: {:?}", goal_actions.as_set(), goals);
                 // If we are are on the second to last proposition
                 // layer, we are done
                 if (idx - 2) == 0 {
-                    debug!("Actions: {:?}", goal_actions.as_set());
                     plan.push(goal_actions.as_set());
                     debug!("Found plan! {:?}", plan);
                     success = true;
                     break;
                 } else {
-                    debug!("Actions: {:?}", goal_actions.as_set());
                     plan.push(goal_actions.as_set());
                     let next_goals = goal_actions.as_set().into_iter()
                         .flat_map(|action| action.reqs)
@@ -403,21 +403,20 @@ mod simple_solver_test {
         let not_p1 = p1.negate();
         let p2 = Proposition::from_str("dog needs to pee");
         let not_p2 = p2.negate();
-        let p3 = Proposition::from_str("caffeinated");
 
         let a1 = Action::new(
             String::from("coffee"),
             hashset!{&p1},
-            hashset!{&p3, &not_p1}
+            hashset!{&not_p1}
         );
 
         let a2 = Action::new(
             String::from("walk dog"),
-            hashset!{&p2, &p3},
+            hashset!{&p2, &not_p1},
             hashset!{&not_p2},
         );
 
-        let goals = hashset!{not_p1, not_p2, p3};
+        let goals = hashset!{not_p1, not_p2};
 
         let mut pg = PlanGraph::new(
             hashset!{p1, p2},
@@ -429,8 +428,10 @@ mod simple_solver_test {
         debug!("Plangraph: {:?}", pg);
 
         let solver = SimpleSolver::new();
-        let expected = Some(vec![hashset!{a1.clone()}, hashset!{a2.clone()}]);
-        let actual = PlanGraph::format_plan(solver.search(&pg));
+        let expected = vec![hashset!{a1.clone()}, hashset!{a2.clone()}];
+        let plan = solver.search(&pg);
+        debug!("Plan: {:?}", plan);
+        let actual = PlanGraph::format_plan(plan.unwrap());
         assert_eq!(expected, actual);
     }
 }

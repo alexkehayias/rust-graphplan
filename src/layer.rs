@@ -1,24 +1,26 @@
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::collections::{HashSet};
 use crate::proposition::Proposition;
 use crate::action::Action;
 use crate::pairset::{PairSet, pairs, pairs_from_sets};
 
 
-pub type ActionLayerData = HashSet<Action>;
+pub type ActionLayerData<ActionId> = HashSet<Action<ActionId>>;
 pub type PropositionLayerData = HashSet<Proposition>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
-pub enum Layer {
-    ActionLayer(ActionLayerData),
+pub enum Layer<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> {
+    ActionLayer(ActionLayerData<ActionId>),
     PropositionLayer(PropositionLayerData),
 }
 
 pub type MutexPairs<T> = HashSet<PairSet<T>>;
 
-impl Layer {
+impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> Layer<ActionId> {
     /// Create a new layer from another. ActionLayer returns a
     /// PropositionLayer and PropositionLayer returns an ActionLayer
-    pub fn from_layer(all_actions: HashSet<&Action>, layer: &Layer) -> Layer {
+    pub fn from_layer(all_actions: HashSet<&Action<ActionId>>, layer: &Layer<ActionId>) -> Layer<ActionId> {
         match layer {
             Layer::ActionLayer(actions) => {
                 let mut layer_data = PropositionLayerData::new();
@@ -34,7 +36,7 @@ impl Layer {
                 let mut layer_data = ActionLayerData::new();
 
                 for a in all_actions {
-                    // Include action a if it satisfies props
+                    // Include action if it satisfies one or more props
                     if a.reqs.is_subset(&props) {
                         layer_data.insert(a.to_owned());
                     }
@@ -42,22 +44,17 @@ impl Layer {
 
                 // Add in maintenance actions for all props
                 for p in props {
-                    layer_data.insert(
-                        Action::new(
-                            format!("[maintain] {}{}", if p.negation {"¬"} else {""}, p.name),
-                            hashset!{p},
-                            hashset!{p},
-                        )
-                    );
+                    layer_data.insert(Action::new_maintenance(p.to_owned()));
                 }
+
                 Layer::ActionLayer(layer_data)
             },
         }
     }
 
-    pub fn action_mutexes<'a>(actions: &HashSet<&'a Action>,
+    pub fn action_mutexes<'a>(actions: &HashSet<&'a Action<ActionId>>,
                               mutex_props: Option<&MutexPairs<Proposition>>)
-                              -> MutexPairs<&'a Action> {
+                              -> MutexPairs<&'a Action<ActionId>> {
         let mut mutexes = MutexPairs::new();
         let action_pairs = pairs(&actions);
 
@@ -137,8 +134,8 @@ impl Layer {
     /// - All ways of achieving the propositions at are pairwise mutex
     pub fn proposition_mutexes(
         props: &HashSet<Proposition>,
-        actions: &HashSet<&Action>,
-        mutex_actions: Option<&MutexPairs<&Action>>,
+        actions: &HashSet<&Action<ActionId>>,
+        mutex_actions: Option<&MutexPairs<&Action<ActionId>>>,
     ) -> MutexPairs<Proposition> {
         let mut mutexes = MutexPairs::new();
 
@@ -157,12 +154,12 @@ impl Layer {
         // - If there is no difference then the props are mutex
         if let Some(mx_actions) = mutex_actions {
             for PairSet(p1, p2) in pairs(&props) {
-                let viable_acts: HashSet<&Action> = actions.iter()
+                let viable_acts: HashSet<&Action<_>> = actions.iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
                     .map(|a| a.to_owned())
                     .collect();
 
-                let viable_act_pairs: HashSet<PairSet<&Action>> = pairs(&viable_acts)
+                let viable_act_pairs: HashSet<PairSet<&Action<_>>> = pairs(&viable_acts)
                     .into_iter()
                     .collect();
 
@@ -186,17 +183,9 @@ mod from_layer_test {
     #[test]
     fn action_layer_from_proposition_layer() {
         let prop = Proposition::from_str("test");
-        let layer = Layer::PropositionLayer(hashset!{prop.clone()});
+        let layer = Layer::<String>::PropositionLayer(hashset!{prop.clone()});
         let actual = Layer::from_layer(hashset!{}, &layer);
-        let expected = Layer::ActionLayer(
-            hashset!{
-                Action::new(
-                    String::from("[maintain] test"),
-                    hashset!{&prop},
-                    hashset!{&prop}
-                )
-            }
-        );
+        let expected = Layer::ActionLayer(hashset!{Action::new_maintenance(prop)});
         assert_eq!(expected, actual);
     }
 }
@@ -221,7 +210,7 @@ mod mutex_test {
 
         assert_eq!(
             expected,
-            Layer::proposition_mutexes(
+            Layer::<String>::proposition_mutexes(
                 &props,
                 &actions,
                 Some(&action_mutexes)

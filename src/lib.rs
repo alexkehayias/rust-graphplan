@@ -1,5 +1,7 @@
 use std::collections::{HashSet};
 use std::fs;
+use std::hash::Hash;
+use std::fmt::Debug;
 
 #[macro_use] extern crate serde_derive;
 extern crate serde;
@@ -33,16 +35,17 @@ struct ConfigAction {
     effects: Vec<String>,
 }
 
-pub struct GraphPlan<T: GraphPlanSolver> {
+pub struct GraphPlan<ActionId: Debug + Hash + Ord + Clone,
+                     T: GraphPlanSolver<ActionId>> {
     pub solver: T,
-    pub plangraph: PlanGraph,
+    pub plangraph: PlanGraph<ActionId>,
 }
 
-impl<T: GraphPlanSolver> GraphPlan<T> {
+impl<ActionId: Debug + Hash + Ord + Clone, T: GraphPlanSolver<ActionId>> GraphPlan<ActionId, T> {
     pub fn new(initial_props: HashSet<Proposition>,
                goals: HashSet<Proposition>,
-               actions: HashSet<Action>,
-               solver: T) -> GraphPlan<T> {
+               actions: HashSet<Action<ActionId>>,
+               solver: T) -> GraphPlan<ActionId, T> {
         let pg = PlanGraph::new(initial_props, goals, actions);
         GraphPlan {
             solver: solver,
@@ -50,13 +53,13 @@ impl<T: GraphPlanSolver> GraphPlan<T> {
         }
     }
 
-    pub fn search(&mut self) -> Option<Solution>{
+    pub fn search(&mut self) -> Option<Solution<ActionId>>{
         self.plangraph.search_with(&self.solver)
     }
 }
 
-impl GraphPlan<SimpleSolver> {
-    pub fn from_toml_string(string: String) -> GraphPlan<SimpleSolver> {
+impl GraphPlan<String, SimpleSolver> {
+    pub fn from_toml_string(string: String) -> GraphPlan<String, SimpleSolver> {
         let config: Config = toml::from_str(&string).expect("Fail");
         let initial_props: HashSet<Proposition> = config.initial
             .iter()
@@ -68,7 +71,7 @@ impl GraphPlan<SimpleSolver> {
             .map(|i| Proposition::new(i.to_owned().replace("not_", ""),
                                       i.starts_with("not_")))
             .collect();
-        let actions: HashSet<Action> = config.actions
+        let actions: HashSet<Action<String>> = config.actions
             .iter()
             .map(|i| {
                 let reqs: HashSet<Proposition> = i.reqs.iter()
@@ -95,7 +98,7 @@ impl GraphPlan<SimpleSolver> {
         )
     }
 
-    pub fn from_toml(filepath: String) -> GraphPlan<SimpleSolver> {
+    pub fn from_toml(filepath: String) -> GraphPlan<String, SimpleSolver> {
         let string = fs::read_to_string(filepath).expect("Failed to read file");
         GraphPlan::from_toml_string(string)
     }
@@ -114,23 +117,22 @@ mod integration_test {
         let not_p1 = p1.negate();
         let p2 = Proposition::from_str("dog needs to pee");
         let not_p2 = p2.negate();
-        let p3 = Proposition::from_str("caffeinated");
 
         let a1 = Action::new(
             String::from("coffee"),
             hashset!{&p1},
-            hashset!{&p3, &not_p1}
+            hashset!{&not_p1}
         );
 
         let a2 = Action::new(
             String::from("walk dog"),
-            hashset!{&p2, &p3},
+            hashset!{&p2, &not_p1},
             hashset!{&not_p2},
         );
 
         let mut pg = GraphPlan::new(
             hashset!{p1, p2},
-            hashset!{not_p1, not_p2, p3},
+            hashset!{not_p1, not_p2},
             hashset!{a1, a2},
             SimpleSolver::new()
         );
@@ -140,7 +142,7 @@ mod integration_test {
     #[test]
     fn load_from_toml_config() {
         let path = String::from("resources/rocket_domain.toml");
-        let mut pg: GraphPlan<SimpleSolver> = GraphPlan::from_toml(path);
+        let mut pg: GraphPlan<_, SimpleSolver> = GraphPlan::from_toml(path);
         assert!(pg.search() != None, "Solution should not be None");
     }
 }

@@ -139,11 +139,7 @@ mod pairs_test {
             hashset!{&p2, &p3},
             hashset!{&not_p2},
         );
-        let a3 = Action::new(
-            String::from("[maintain] ¬tired"),
-            hashset!{&not_p1},
-            hashset!{&not_p1},
-        );
+        let a3 = Action::new_maintenance(p1.negate());
 
         assert_eq!(
             pairs_from_sets(hashset!{a1.clone()}, hashset!{a2.clone()}),

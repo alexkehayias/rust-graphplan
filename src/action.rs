@@ -1,12 +1,12 @@
 use std::cmp::{Ordering};
 use std::hash::{Hash, Hasher};
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
 use crate::proposition::Proposition;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
 pub enum ActionType<ActionId> {
     Action(ActionId),
-    Maintenance(ActionId)
+    Maintenance(Proposition)
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -27,13 +27,13 @@ impl<ActionId: Hash + Clone> Hash for Action<ActionId> {
 
 impl<ActionId: Ord + Clone + Hash> Ord for Action<ActionId> {
     fn cmp(&self, other: &Self) -> Ordering {
-        (self.id).cmp(&(other.id))
+        (self.id).cmp(&other.id)
     }
 }
 
 impl<ActionId: Hash + Ord + Clone> PartialOrd for Action<ActionId> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+        Some((self.id).cmp(&other.id))
     }
 }
 
@@ -46,10 +46,18 @@ impl<ActionId: Hash + Clone> Action<ActionId> {
         }
     }
 
+    pub fn new_maintenance(prop: Proposition) -> Action<ActionId> {
+        Action {
+            id: ActionType::Maintenance(prop.clone()),
+            reqs: hashset!{prop.clone()},
+            effects: hashset!{prop},
+        }
+    }
+
     pub fn get_action(&self) -> &ActionId {
         match &self.id {
             ActionType::Action(action) => action,
-            ActionType::Maintenance(action) => action
+            _ => panic!("Attempted to get an action from a maintenance action type"),
         }
     }
 }
@@ -66,28 +74,33 @@ mod test_action {
     }
 
     #[test]
-    fn test_action() {
+    fn equality_works() {
         let a = Action::new(TestActionId::A, hashset!{}, hashset!{});
-        let a2 = Action::new(TestActionId::A, hashset!{}, hashset!{});
+        assert_eq!(a.clone(), a.clone());
 
-        // The same ActionId value results in the same internal ID
+        let a2 = Action::new(TestActionId::A, hashset!{}, hashset!{});
         assert_eq!(a, a2);
 
-        // Making a set from duplicate actions removes dupes
+        let b = Action::new(TestActionId::B, hashset!{}, hashset!{});
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn hashing_works() {
+        let a = Action::new(TestActionId::A, hashset!{}, hashset!{});
+        let a2 = Action::new(TestActionId::A, hashset!{}, hashset!{});
         let set = hashset!{a.clone(), a2};
         assert_eq!(set.len(), 1);
+    }
 
-        // Actions with different ActionId are not equal
-        let b = Action::new(TestActionId::B, hashset!{}, hashset!{});
-        assert_ne!(a, b.clone());
 
-        // Maintenance actions for the same ActionId are not equal
-        let b2 = Action {
-            id: ActionType::Maintenance(TestActionId::B),
-            reqs: hashset!{},
-            effects: hashset!{},
-        };
+    #[test]
+    fn maintenance_action_works() {
+        let m: Action<Proposition> = Action::new_maintenance(Proposition::from_str("test"));
+        let m2 = Action::new_maintenance(Proposition::from_str("test"));
+        assert_eq!(m, m2.clone());
 
-        assert_ne!(b, b2);
+        let m3 = Action::new_maintenance(Proposition::from_str("test2"));
+        assert_ne!(m2, m3);
     }
 }

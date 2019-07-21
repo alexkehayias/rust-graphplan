@@ -1,29 +1,30 @@
+use std::fmt::Debug;
 use std::collections::{HashMap, HashSet, BTreeSet};
+use std::hash::Hash;
 use log::{debug};
 use crate::proposition::Proposition;
-use crate::action::Action;
+use crate::action::{Action, ActionType};
 use crate::pairset::{pairs, PairSet};
 use crate::solver::GraphPlanSolver;
 use crate::layer::{Layer, MutexPairs};
 
 
 type LayerNumber = usize;
-type QueryActions = Result<BTreeSet<Action>, String>;
-pub type Solution = Vec<HashSet<Action>>;
+pub type Solution<ActionId> = Vec<HashSet<Action<ActionId>>>;
 
 #[derive(Debug)]
-pub struct PlanGraph {
+pub struct PlanGraph<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> {
     pub goals: HashSet<Proposition>,
-    pub actions: HashSet<Action>,
-    pub layers: Vec<Layer>,
+    pub actions: HashSet<Action<ActionId>>,
+    pub layers: Vec<Layer<ActionId>>,
     pub mutex_props: HashMap<LayerNumber, MutexPairs<Proposition>>,
-    pub mutex_actions: HashMap<LayerNumber, MutexPairs<Action>>,
+    pub mutex_actions: HashMap<LayerNumber, MutexPairs<Action<ActionId>>>,
 }
 
-impl PlanGraph {
+impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> PlanGraph<ActionId> {
     pub fn new(initial_props: HashSet<Proposition>,
                goals: HashSet<Proposition>,
-               actions: HashSet<Action>) -> Self {
+               actions: HashSet<Action<ActionId>>) -> Self {
         let init_layer = Layer::PropositionLayer(initial_props);
         PlanGraph {
             goals: goals,
@@ -34,7 +35,7 @@ impl PlanGraph {
         }
     }
 
-    pub fn push(&mut self, layer: Layer) {
+    pub fn push(&mut self, layer: Layer<ActionId>) {
         self.layers.push(layer)
     }
 
@@ -57,7 +58,7 @@ impl PlanGraph {
                                         .collect::<Vec<_>>()
                                         .is_empty()
                                 })
-                                .collect::<HashSet<&Action>>()
+                                .collect::<HashSet<&Action<_>>>()
                         })
                         .unwrap_or(self.actions.iter().collect());
 
@@ -66,7 +67,7 @@ impl PlanGraph {
                         actions_no_mutex_reqs,
                         &p_layer
                     );
-                    let action_layer_actions: HashSet<&Action> = match &action_layer {
+                    let action_layer_actions: HashSet<&Action<_>> = match &action_layer {
                         Layer::ActionLayer(action_data) => action_data.iter().collect(),
                         _ => unreachable!("Tried to get actions from PropositionLayer")
                     };
@@ -119,7 +120,7 @@ impl PlanGraph {
     }
 
     // Returns the actions at layer index as an ordered set
-    pub fn actions_at_layer(&self, index: usize) -> QueryActions {
+    pub fn actions_at_layer(&self, index: usize) -> Result<BTreeSet<Action<ActionId>>, String> {
         self.layers.get(index).map_or(
             Err(format!("Layer {} does not exist", index)),
             |layer| {
@@ -183,8 +184,8 @@ impl PlanGraph {
     /// Searches the planning graph for a solution using the solver if
     /// there is no solution, extends the graph to depth i+1 and tries
     /// to solve again
-    pub fn search_with<T>(&mut self, solver: &T) -> Option<Solution>
-    where T: GraphPlanSolver {
+    pub fn search_with<T>(&mut self, solver: &T) -> Option<Solution<ActionId>>
+    where T: GraphPlanSolver<ActionId> {
         let mut tries = 0;
         let mut solution = None;
         let max_tries = self.actions.len() + 1;
@@ -214,13 +215,14 @@ impl PlanGraph {
     }
 
     /// Takes a solution and filters out maintenance actions
-    pub fn format_plan(solution: Option<Solution>) -> Option<Solution> {
-        solution.map(|steps| steps.iter()
-                     .map(|s| s.iter()
-                          .filter(|i| !i.name.contains("[maintain]"))
-                          .cloned()
-                          .collect())
-                     .collect()
-        )
+    pub fn format_plan(solution: Solution<ActionId>) -> Solution<ActionId> {
+        solution.iter()
+            .map(|s| s.iter()
+                 .filter(|i| match i.id {
+                     ActionType::Action(_) => true,
+                     ActionType::Maintenance(_) => false})
+                 .cloned()
+                 .collect())
+            .collect()
     }
 }
