@@ -18,7 +18,7 @@ use graphplan::plangraph::PlanGraph;
 
 fn main() -> () {
     let path = String::from("resources/rocket_domain.toml");
-    let mut pg: GraphPlan<SimpleSolver> = GraphPlan::from_toml(path);
+    let mut pg: GraphPlan<_, SimpleSolver> = GraphPlan::from_toml(path);
     println!("Result: {:?}", PlanGraph::format_plan(pg.search()));
 }
 ```
@@ -37,33 +37,87 @@ use graphplan::solver::SimpleSolver;
 fn main() -> () {
     let p1 = Proposition::from_str("tired");
     let not_p1 = p1.negate();
-
     let p2 = Proposition::from_str("dog needs to pee");
     let not_p2 = p2.negate();
-
-    let p3 = Proposition::from_str("caffeinated");
 
     let a1 = Action::new(
         String::from("coffee"),
         hashset!{&p1},
-        hashset!{&p3, &not_p1}
+        hashset!{&not_p1}
     );
 
     let a2 = Action::new(
         String::from("walk dog"),
-        hashset!{&p2, &p3},
+        hashset!{&p2, &not_p1},
         hashset!{&not_p2},
     );
 
     let mut pg = GraphPlan::new(
-        hashset!{&p1, &p2},
-        hashset!{&not_p1, &not_p2, &p3},
-        hashset!{&a1, &a2},
+        hashset!{p1, p2},
+        hashset!{not_p1, not_p2},
+        hashset!{a1, a2},
         SimpleSolver::new()
     );
+
     println!("Result: {:?}", PlanGraph::format_plan(pg.search());
 }
 ```
+
+### Finite actions
+
+Sometimes you want to have a set actions that can be statically checked. To do that you can use your own `ActionId` which will be used to uniquely identify an `Action`. For example:
+
+```rust
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+pub enum MyAction {
+    Drink,
+    Eat,
+}
+
+let p1 = graphplan::Proposition::from_str("hungry");
+let p2 = p1.negate();
+let p3 = graphplan::Proposition::from_str("thirsty");
+let p4 = p3.negate();
+
+let a1 = graphplan::Action::new(
+  MyAction::Eat,
+  hashset!{&p1},
+  hashset!{&p2},
+);
+
+let a2 = graphplan::Action::new(
+  MyAction::Drink,
+  hashset!{&p3},
+  hashset!{&p4},
+);
+```
+
+Now our planner knows there will only ever by `MyAction` set of actions. This is particularly useful if you will be iterating over a plan and want to get the benefit of exhaustiveness checking that way when you add a new action, you'll get a compile time error that you forgot to handle your new action.
+
+### Embedding data in actions
+
+Sometimes we also want to attach additional data that's not relevant to GraphPlan, but convenient to pass through. To do that, you can use an enum variant's associated data.
+
+```rust
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+pub struct LocationId(String);
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+pub enum MyAction {
+    Move(LocationId),
+}
+
+let p1 = graphplan::Proposition::from_str("location1");
+
+let a1 = graphplan::Action::new(
+  MyAction::Move(LocationId(String::from("1"))),
+  hashset!{},
+  hashset!{&p1},
+);
+
+```
+
+Now the caller can access the associated data of an action (which is specific to your program) when doing something with a returned plan. This avoids a bunch of boilerplate by preventing the need for a bunch of wrapper code around GraphPlan actions and your program.
 
 ## Running benchmarks
 
