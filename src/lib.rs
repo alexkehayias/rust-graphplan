@@ -1,11 +1,19 @@
 use std::collections::{HashSet};
-use std::fs;
 use std::hash::Hash;
 use std::fmt::Debug;
 
+#[cfg(any(feature = "toml", feature = "wasm"))]
 #[macro_use] extern crate serde_derive;
+
+#[cfg(any(feature = "toml", feature = "wasm"))]
+use std::fs;
+
+#[cfg(any(feature = "toml", feature = "wasm"))]
 extern crate serde;
-use toml;
+
+#[cfg(any(feature = "toml", feature = "wasm"))]
+use toml_crate as toml;
+
 
 #[macro_use] pub mod macros;
 pub mod proposition;
@@ -20,7 +28,7 @@ pub use crate::action::Action;
 pub use crate::plangraph::{PlanGraph, Solution};
 pub use crate::solver::{GraphPlanSolver, SimpleSolver};
 
-
+#[cfg(any(feature = "toml", feature = "wasm"))]
 #[derive(Deserialize)]
 struct Config {
     initial: Vec<String>,
@@ -28,6 +36,7 @@ struct Config {
     actions: Vec<ConfigAction>
 }
 
+#[cfg(any(feature = "toml", feature = "wasm"))]
 #[derive(Deserialize)]
 struct ConfigAction {
     name: String,
@@ -59,6 +68,7 @@ impl<ActionId: Debug + Hash + Ord + Clone, T: GraphPlanSolver<ActionId>> GraphPl
 }
 
 impl GraphPlan<String, SimpleSolver> {
+    #[cfg(any(feature = "toml", feature = "wasm"))]
     pub fn from_toml_string(string: String) -> GraphPlan<String, SimpleSolver> {
         let config: Config = toml::from_str(&string).expect("Fail");
         let initial_props: HashSet<Proposition> = config.initial
@@ -98,6 +108,7 @@ impl GraphPlan<String, SimpleSolver> {
         )
     }
 
+    #[cfg(any(feature = "toml", feature = "wasm"))]
     pub fn from_toml(filepath: String) -> GraphPlan<String, SimpleSolver> {
         let string = fs::read_to_string(filepath).expect("Failed to read file");
         GraphPlan::from_toml_string(string)
@@ -139,6 +150,7 @@ mod integration_test {
         assert!(pg.search() != None, "Solution should not be None");
     }
 
+    #[cfg(any(feature = "toml", feature = "wasm"))]
     #[test]
     fn load_from_toml_config() {
         let path = String::from("resources/rocket_domain.toml");
