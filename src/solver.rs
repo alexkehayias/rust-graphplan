@@ -41,6 +41,7 @@ impl<ActionId: Clone + Hash + Eq + Debug> ActionCombination<ActionId> {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn as_vec(&self) -> Vec<Action<ActionId>> {
         self.0.values()
             .cloned()
