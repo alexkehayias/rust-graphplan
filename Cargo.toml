@@ -50,7 +50,7 @@ path = "src/lib.rs"
 
 [features]
 wasm = ["stdweb", "toml_crate", "serde", "serde_derive"]
-toml = ["toml_crate"]
+toml = ["toml_crate", "serde", "serde_derive"]
 
 [[bin]]
 name = "graphplan-web"
