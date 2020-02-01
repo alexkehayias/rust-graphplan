@@ -1,44 +1,45 @@
 use std::cmp::{Ordering};
+use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::collections::HashSet;
 use crate::proposition::Proposition;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
-pub enum ActionType<ActionId> {
+pub enum ActionType<ActionId, PropositionId: Display> {
     Action(ActionId),
-    Maintenance(Proposition)
+    Maintenance(Proposition<PropositionId>)
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Action<ActionId: Hash + Clone> {
-    pub id: ActionType<ActionId>,
-    pub reqs: HashSet<Proposition>,
-    pub effects: HashSet<Proposition>,
+pub struct Action<ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq> {
+    pub id: ActionType<ActionId, PropositionId>,
+    pub reqs: HashSet<Proposition<PropositionId>>,
+    pub effects: HashSet<Proposition<PropositionId>>,
 }
 
 /// Actions are hashed based on their id, that means you can't have
 /// two actions of the same id in a HashSet even if they have
 /// different reqs and effects
-impl<ActionId: Hash + Clone> Hash for Action<ActionId> {
+impl<ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq> Hash for Action<ActionId, PropositionId> {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
         self.id.hash(state);
     }
 }
 
-impl<ActionId: Ord + Clone + Hash> Ord for Action<ActionId> {
+impl<ActionId: Ord + Clone + Hash, PropositionId: Ord + PartialEq + Eq + Display + Hash> Ord for Action<ActionId, PropositionId> {
     fn cmp(&self, other: &Self) -> Ordering {
         (self.id).cmp(&other.id)
     }
 }
 
-impl<ActionId: Hash + Ord + Clone> PartialOrd for Action<ActionId> {
+impl<ActionId: Hash + Ord + Clone, PropositionId: Ord + PartialEq + Eq + Display + Hash> PartialOrd for Action<ActionId, PropositionId> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some((self.id).cmp(&other.id))
     }
 }
 
-impl<ActionId: Hash + Clone> Action<ActionId> {
-    pub fn new(id: ActionId, reqs: HashSet<&Proposition>, effects: HashSet<&Proposition>) -> Action<ActionId> {
+impl<ActionId: Hash + Clone, PropositionId: Display + Hash + Clone + PartialEq + Eq> Action<ActionId, PropositionId> {
+    pub fn new(id: ActionId, reqs: HashSet<&Proposition<PropositionId>>, effects: HashSet<&Proposition<PropositionId>>) -> Action<ActionId, PropositionId> {
         Action {
             id: ActionType::Action(id),
             reqs: reqs.into_iter().map(|i| i.to_owned()).collect(),
@@ -46,7 +47,7 @@ impl<ActionId: Hash + Clone> Action<ActionId> {
         }
     }
 
-    pub fn new_maintenance(prop: Proposition) -> Action<ActionId> {
+    pub fn new_maintenance(prop: Proposition<PropositionId>) -> Action<ActionId, PropositionId> {
         Action {
             id: ActionType::Maintenance(prop.clone()),
             reqs: hashset!{prop.clone()},
@@ -75,7 +76,7 @@ mod test_action {
 
     #[test]
     fn equality_works() {
-        let a = Action::new(TestActionId::A, hashset!{}, hashset!{});
+        let a: Action<TestActionId, &str> = Action::new(TestActionId::A, hashset!{}, hashset!{});
         assert_eq!(a.clone(), a.clone());
 
         let a2 = Action::new(TestActionId::A, hashset!{}, hashset!{});
@@ -87,7 +88,7 @@ mod test_action {
 
     #[test]
     fn hashing_works() {
-        let a = Action::new(TestActionId::A, hashset!{}, hashset!{});
+        let a: Action<TestActionId, &str> = Action::new(TestActionId::A, hashset!{}, hashset!{});
         let a2 = Action::new(TestActionId::A, hashset!{}, hashset!{});
         let set = hashset!{a.clone(), a2};
         assert_eq!(set.len(), 1);
@@ -96,11 +97,11 @@ mod test_action {
 
     #[test]
     fn maintenance_action_works() {
-        let m: Action<Proposition> = Action::new_maintenance(Proposition::from_str("test"));
-        let m2 = Action::new_maintenance(Proposition::from_str("test"));
+        let m: Action<TestActionId, &str> = Action::new_maintenance(Proposition::from("test"));
+        let m2 = Action::new_maintenance(Proposition::from("test"));
         assert_eq!(m, m2.clone());
 
-        let m3 = Action::new_maintenance(Proposition::from_str("test2"));
+        let m3 = Action::new_maintenance(Proposition::from("test2"));
         assert_ne!(m2, m3);
     }
 }

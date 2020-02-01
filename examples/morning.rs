@@ -5,7 +5,7 @@ fn run() {
     use graphplan::plangraph::PlanGraph;
 
     let path = String::from("resources/morning_domain.toml");
-    let mut pg: GraphPlan<String, SimpleSolver> = GraphPlan::from_toml(path);
+    let mut pg: GraphPlan<_, _, SimpleSolver> = GraphPlan::from_toml(path);
     println!("Result: {:?}", PlanGraph::format_plan(pg.search().unwrap()));
 }
 

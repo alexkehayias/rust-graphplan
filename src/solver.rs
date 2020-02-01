@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::iter::FromIterator;
 use std::collections::{HashMap, HashSet, BTreeSet, VecDeque};
@@ -11,10 +11,11 @@ use crate::layer::{MutexPairs};
 use crate::plangraph::{PlanGraph, Solution};
 
 
-pub trait GraphPlanSolver<ActionId: Hash + Ord + Clone + Debug> {
+pub trait GraphPlanSolver<ActionId: Hash + Ord + Clone + Debug,
+                          PropositionId: Hash + Ord + Clone + Debug + Display> {
     /// Searches a plangraph for a sequence of collection of actions
     /// that satisfy the goals
-    fn search(&self, plangraph: &PlanGraph<ActionId>) -> Option<Solution<ActionId>>;
+    fn search(&self, plangraph: &PlanGraph<ActionId, PropositionId>) -> Option<Solution<ActionId, PropositionId>>;
 }
 
 pub struct SimpleSolver;
@@ -26,15 +27,18 @@ impl SimpleSolver {
 }
 
 type GoalIndex = usize;
-type Attempts<ActionId> = HashMap<usize, BTreeSet<Action<ActionId>>>;
+type Attempts<ActionId, PropositionId> = HashMap<usize, BTreeSet<Action<ActionId, PropositionId>>>;
 
 #[derive(Clone, Debug, PartialEq)]
-struct ActionCombination<ActionId: Hash + PartialEq + Debug + Clone>(
-    HashMap<GoalIndex, Action<ActionId>>
+struct ActionCombination<ActionId: Hash + PartialEq + Clone + Debug ,
+                         PropositionId: Hash + Eq + PartialEq + Clone + Debug + Display>(
+    HashMap<GoalIndex, Action<ActionId, PropositionId>>
 );
 
-impl<ActionId: Clone + Hash + Eq + Debug> ActionCombination<ActionId> {
-    pub fn as_set(&self) -> HashSet<Action<ActionId>> {
+impl<ActionId: Clone + Hash + Eq + Debug,
+     PropositionId: Clone + Hash + Eq + Debug + Display>
+    ActionCombination<ActionId, PropositionId> {
+    pub fn as_set(&self) -> HashSet<Action<ActionId, PropositionId>> {
         self.0.values()
             .cloned()
             .into_iter()
@@ -42,7 +46,7 @@ impl<ActionId: Clone + Hash + Eq + Debug> ActionCombination<ActionId> {
     }
 
     #[allow(dead_code)]
-    pub fn as_vec(&self) -> Vec<Action<ActionId>> {
+    pub fn as_vec(&self) -> Vec<Action<ActionId, PropositionId>> {
         self.0.values()
             .cloned()
             .into_iter()
@@ -51,24 +55,29 @@ impl<ActionId: Clone + Hash + Eq + Debug> ActionCombination<ActionId> {
 }
 
 #[derive(Clone, Debug)]
-struct GoalSetActionGenerator<ActionId: Debug + Hash + Clone + Eq + Ord> {
-    goals: Vec<Proposition>,
-    actions: BTreeSet<Action<ActionId>>,
-    mutexes: Option<MutexPairs<Action<ActionId>>>,
+struct GoalSetActionGenerator<ActionId: Debug + Hash + Clone + Eq + Ord,
+                              PropositionId: Debug + Display + Hash + Clone + Eq + Ord> {
+    goals: Vec<Proposition<PropositionId>>,
+    actions: BTreeSet<Action<ActionId, PropositionId>>,
+    mutexes: Option<MutexPairs<Action<ActionId, PropositionId>>>,
 }
 
-impl<ActionId: Ord + Clone + Hash + Debug> GoalSetActionGenerator<ActionId> {
-    pub fn new(goals: Vec<Proposition>,
-               actions: BTreeSet<Action<ActionId>>,
-               mutexes: Option<MutexPairs<Action<ActionId>>>,)
-               -> GoalSetActionGenerator<ActionId> {
+impl<ActionId: Ord + Clone + Hash + Debug,
+     PropositionId: Ord + Clone + Hash + Debug + Display>
+    GoalSetActionGenerator<ActionId, PropositionId> {
+    pub fn new(goals: Vec<Proposition<PropositionId>>,
+               actions: BTreeSet<Action<ActionId, PropositionId>>,
+               mutexes: Option<MutexPairs<Action<ActionId, PropositionId>>>,)
+               -> GoalSetActionGenerator<ActionId, PropositionId> {
         GoalSetActionGenerator {goals, actions, mutexes}
     }
 }
 
-impl<ActionId: Ord + Clone + Hash + Debug> IntoIterator for GoalSetActionGenerator<ActionId> {
-    type Item = ActionCombination<ActionId>;
-    type IntoIter = ActionCombinationIterator<ActionId>;
+impl<ActionId: Ord + Clone + Hash + Debug,
+     PropositionId: Ord + Clone + Hash + Debug + Display>
+    IntoIterator for GoalSetActionGenerator<ActionId, PropositionId> {
+    type Item = ActionCombination<ActionId, PropositionId>;
+    type IntoIter = ActionCombinationIterator<ActionId, PropositionId>;
 
     fn into_iter(self) -> Self::IntoIter {
         ActionCombinationIterator::new(self)
@@ -76,15 +85,18 @@ impl<ActionId: Ord + Clone + Hash + Debug> IntoIterator for GoalSetActionGenerat
 }
 
 #[derive(Clone, Debug)]
-struct ActionCombinationIterator<ActionId: Ord + Clone + Hash + Debug> {
-    meta: GoalSetActionGenerator<ActionId>, // defines goals we are trying achieve
-    attempts: Attempts<ActionId>, // previous attempts to meet a goal
+struct ActionCombinationIterator<ActionId: Ord + Clone + Hash + Debug,
+                                 PropositionId: Ord + Clone + Hash + Debug + Display> {
+    meta: GoalSetActionGenerator<ActionId, PropositionId>, // defines goals we are trying achieve
+    attempts: Attempts<ActionId, PropositionId>, // previous attempts to meet a goal
     goals_met: bool, // flag indicating all goals are met or restart
-    accum: HashMap<GoalIndex, Action<ActionId>> // combination of actions
+    accum: HashMap<GoalIndex, Action<ActionId, PropositionId>> // combination of actions
 }
 
-impl<ActionId: Ord + Debug + Hash + Clone> ActionCombinationIterator<ActionId> {
-    pub fn new(action_combinations: GoalSetActionGenerator<ActionId>) -> ActionCombinationIterator<ActionId> {
+impl<ActionId: Ord + Debug + Hash + Clone,
+     PropositionId: Ord + Debug + Display + Hash + Clone>
+    ActionCombinationIterator<ActionId, PropositionId> {
+    pub fn new(action_combinations: GoalSetActionGenerator<ActionId, PropositionId>) -> ActionCombinationIterator<ActionId, PropositionId> {
         ActionCombinationIterator {
             meta: action_combinations,
             attempts: Attempts::new(),
@@ -94,8 +106,10 @@ impl<ActionId: Ord + Debug + Hash + Clone> ActionCombinationIterator<ActionId> {
     }
 }
 
-impl<ActionId: Ord + Clone + Hash + Debug + PartialEq> Iterator for ActionCombinationIterator<ActionId> {
-    type Item = ActionCombination<ActionId>;
+impl<ActionId: Ord + Clone + Hash + Debug + PartialEq,
+     PropositionId: Ord + Clone + Hash + Debug + Display + PartialEq>
+    Iterator for ActionCombinationIterator<ActionId, PropositionId> {
+    type Item = ActionCombination<ActionId, PropositionId>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let goals = &self.meta.goals;
@@ -215,8 +229,8 @@ mod goal_set_action_generator_test {
 
     #[test]
     fn single_goal() {
-        let p1 = Proposition::from_str("coffee");
-        let p2 = Proposition::from_str("caffeinated");
+        let p1 = Proposition::from("coffee");
+        let p2 = Proposition::from("caffeinated");
         let goals = vec![p2.clone()];
         let mut actions = BTreeSet::new();
         let a1 = Action::new(
@@ -236,10 +250,10 @@ mod goal_set_action_generator_test {
 
     #[test]
     fn multiple_goals() {
-        let p1 = Proposition::from_str("coffee");
-        let p2 = Proposition::from_str("caffeinated");
-        let p3 = Proposition::from_str("breakfast");
-        let p4 = Proposition::from_str("full");
+        let p1 = Proposition::from("coffee");
+        let p2 = Proposition::from("caffeinated");
+        let p3 = Proposition::from("breakfast");
+        let p4 = Proposition::from("full");
         let goals = vec![p2.clone(), p4.clone()];
         let mut actions = BTreeSet::new();
         let a1 = Action::new(
@@ -267,12 +281,12 @@ mod goal_set_action_generator_test {
 
     #[test]
     fn yields_all() {
-        let p1 = Proposition::from_str("tea");
-        let p2 = Proposition::from_str("coffee");
-        let p3 = Proposition::from_str("caffeinated");
-        let p4 = Proposition::from_str("scone");
-        let p5 = Proposition::from_str("muffin");
-        let p6 = Proposition::from_str("full");
+        let p1 = Proposition::from("tea");
+        let p2 = Proposition::from("coffee");
+        let p3 = Proposition::from("caffeinated");
+        let p4 = Proposition::from("scone");
+        let p5 = Proposition::from("muffin");
+        let p6 = Proposition::from("full");
         let goals = vec![p3.clone(), p6.clone()];
         let mut actions = BTreeSet::new();
 
@@ -312,7 +326,7 @@ mod goal_set_action_generator_test {
             vec![a2.clone(), a3.clone()],
         ];
         let generator = GoalSetActionGenerator::new(goals, actions, mutexes);
-        let actual: Vec<Vec<Action<String>>> = generator.into_iter()
+        let actual: Vec<Vec<Action<_, _>>> = generator.into_iter()
             .map(|combo| {let mut i = combo.as_vec(); i.sort(); i})
             .collect();
 
@@ -320,17 +334,20 @@ mod goal_set_action_generator_test {
     }
 }
 
-impl<ActionId: Ord + Clone + Hash + Debug> GraphPlanSolver<ActionId> for SimpleSolver {
-    fn search(&self, plangraph: &PlanGraph<ActionId>) -> Option<Solution<ActionId>> {
+impl<ActionId: Ord + Clone + Hash + Debug,
+     PropositionId: Ord + Clone + Hash + Debug + Display>
+    GraphPlanSolver<ActionId, PropositionId> for SimpleSolver {
+    fn search(&self, plangraph: &PlanGraph<ActionId, PropositionId>) -> Option<Solution<ActionId, PropositionId>> {
         let mut success = false;
         let mut plan = Vec::new();
-        let mut failed_goals_memo: HashSet<(usize, Vec<Proposition>)> = HashSet::new();
+        let mut failed_goals_memo: HashSet<(usize, Vec<Proposition<PropositionId>>)> = HashSet::new();
 
         // Initialize the loop
-        let mut stack: VecDeque<(usize, Vec<Proposition>, Option<ActionCombinationIterator<ActionId>>)> = VecDeque::new();
+        let mut stack: VecDeque<(usize, Vec<Proposition<PropositionId>>, Option<ActionCombinationIterator<ActionId, PropositionId>>)> = VecDeque::new();
         let init_goals = Vec::from_iter(plangraph.goals.clone());
         let init_layer_idx = plangraph.layers.len() - 1;
         let init_action_gen = None;
+
         stack.push_front((init_layer_idx, init_goals, init_action_gen));
 
         while let Some((idx, goals, action_gen)) = stack.pop_front() {
@@ -400,9 +417,9 @@ mod simple_solver_test {
 
     #[test]
     fn solver_works() {
-        let p1 = Proposition::from_str("tired");
+        let p1 = Proposition::from("tired");
         let not_p1 = p1.negate();
-        let p2 = Proposition::from_str("dog needs to pee");
+        let p2 = Proposition::from("dog needs to pee");
         let not_p2 = p2.negate();
 
         let a1 = Action::new(

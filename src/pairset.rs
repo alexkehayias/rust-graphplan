@@ -123,11 +123,11 @@ mod pairs_test {
 
     #[test]
     fn yields_unique_pairs_from_sets_of_actions() {
-        let p1 = Proposition::from_str("tired");
+        let p1 = Proposition::from("tired");
         let not_p1 = p1.negate();
-        let p2 = Proposition::from_str("dog needs to pee");
+        let p2 = Proposition::from("dog needs to pee");
         let not_p2 = p2.negate();
-        let p3 = Proposition::from_str("caffeinated");
+        let p3 = Proposition::from("caffeinated");
 
         let a1 = Action::new(
             String::from("coffee"),

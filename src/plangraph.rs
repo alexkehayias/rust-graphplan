@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::collections::{HashMap, HashSet, BTreeSet};
 use std::hash::Hash;
 use log::{debug};
@@ -10,21 +10,24 @@ use crate::layer::{Layer, MutexPairs};
 
 
 type LayerNumber = usize;
-pub type Solution<ActionId> = Vec<HashSet<Action<ActionId>>>;
+pub type Solution<ActionId, PropositionId> = Vec<HashSet<Action<ActionId, PropositionId>>>;
 
 #[derive(Debug)]
-pub struct PlanGraph<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> {
-    pub goals: HashSet<Proposition>,
-    pub actions: HashSet<Action<ActionId>>,
-    pub layers: Vec<Layer<ActionId>>,
-    pub mutex_props: HashMap<LayerNumber, MutexPairs<Proposition>>,
-    pub mutex_actions: HashMap<LayerNumber, MutexPairs<Action<ActionId>>>,
+pub struct PlanGraph<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
+                     PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display> {
+    pub goals: HashSet<Proposition<PropositionId>>,
+    pub actions: HashSet<Action<ActionId, PropositionId>>,
+    pub layers: Vec<Layer<ActionId, PropositionId>>,
+    pub mutex_props: HashMap<LayerNumber, MutexPairs<Proposition<PropositionId>>>,
+    pub mutex_actions: HashMap<LayerNumber, MutexPairs<Action<ActionId, PropositionId>>>,
 }
 
-impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> PlanGraph<ActionId> {
-    pub fn new(initial_props: HashSet<Proposition>,
-               goals: HashSet<Proposition>,
-               actions: HashSet<Action<ActionId>>) -> Self {
+impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
+     PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display>
+    PlanGraph<ActionId, PropositionId> {
+    pub fn new(initial_props: HashSet<Proposition<PropositionId>>,
+               goals: HashSet<Proposition<PropositionId>>,
+               actions: HashSet<Action<ActionId, PropositionId>>) -> Self {
         let init_layer = Layer::PropositionLayer(initial_props);
         PlanGraph {
             goals: goals,
@@ -35,7 +38,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> PlanGraph<ActionId>
         }
     }
 
-    pub fn push(&mut self, layer: Layer<ActionId>) {
+    pub fn push(&mut self, layer: Layer<ActionId, PropositionId>) {
         self.layers.push(layer)
     }
 
@@ -58,7 +61,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> PlanGraph<ActionId>
                                         .collect::<Vec<_>>()
                                         .is_empty()
                                 })
-                                .collect::<HashSet<&Action<_>>>()
+                                .collect::<HashSet<&Action<_, _>>>()
                         })
                         .unwrap_or(self.actions.iter().collect());
 
@@ -67,7 +70,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> PlanGraph<ActionId>
                         actions_no_mutex_reqs,
                         &p_layer
                     );
-                    let action_layer_actions: HashSet<&Action<_>> = match &action_layer {
+                    let action_layer_actions: HashSet<&Action<_, _>> = match &action_layer {
                         Layer::ActionLayer(action_data) => action_data.iter().collect(),
                         _ => unreachable!("Tried to get actions from PropositionLayer")
                     };
@@ -120,7 +123,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> PlanGraph<ActionId>
     }
 
     // Returns the actions at layer index as an ordered set
-    pub fn actions_at_layer(&self, index: usize) -> Result<BTreeSet<Action<ActionId>>, String> {
+    pub fn actions_at_layer(&self, index: usize) -> Result<BTreeSet<Action<ActionId, PropositionId>>, String> {
         self.layers.get(index).map_or(
             Err(format!("Layer {} does not exist", index)),
             |layer| {
@@ -184,8 +187,8 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> PlanGraph<ActionId>
     /// Searches the planning graph for a solution using the solver if
     /// there is no solution, extends the graph to depth i+1 and tries
     /// to solve again
-    pub fn search_with<T>(&mut self, solver: &T) -> Option<Solution<ActionId>>
-    where T: GraphPlanSolver<ActionId> {
+    pub fn search_with<T>(&mut self, solver: &T) -> Option<Solution<ActionId, PropositionId>>
+    where T: GraphPlanSolver<ActionId, PropositionId> {
         let mut tries = 0;
         let mut solution = None;
         let max_tries = self.actions.len() + 1;
@@ -215,7 +218,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug> PlanGraph<ActionId>
     }
 
     /// Takes a solution and filters out maintenance actions
-    pub fn format_plan(solution: Solution<ActionId>) -> Solution<ActionId> {
+    pub fn format_plan(solution: Solution<ActionId, PropositionId>) -> Solution<ActionId, PropositionId> {
         solution.iter()
             .map(|s| s.iter()
                  .filter(|i| match i.id {
