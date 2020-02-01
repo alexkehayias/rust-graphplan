@@ -51,6 +51,12 @@ mod proposition_test {
         B,
     }
 
+    impl From<Props> for Proposition<Props> {
+        fn from(prop: Props) -> Self {
+            Self::new(prop, false)
+        }
+    }
+
     #[test]
     fn propositions_can_be_negated() {
         // Sanity check
@@ -84,8 +90,8 @@ mod proposition_test {
 
     #[test]
     fn proposition_ids_are_extensible() {
-        let p1 = Proposition::new(Props::A, false);
-        let p2 = Proposition::new(Props::B, false);
+        let p1 = Proposition::from(Props::A);
+        let p2 = Proposition::from(Props::B);
         let set = hashset!{p1.clone()};
         assert!(set.contains(&p1));
         assert!(!set.contains(&p2));

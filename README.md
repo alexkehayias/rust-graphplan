@@ -35,9 +35,9 @@ use graphplan::action::Action;
 use graphplan::solver::SimpleSolver;
 
 fn main() -> () {
-    let p1 = Proposition::from_str("tired");
+    let p1 = Proposition::from("tired");
     let not_p1 = p1.negate();
-    let p2 = Proposition::from_str("dog needs to pee");
+    let p2 = Proposition::from("dog needs to pee");
     let not_p2 = p2.negate();
 
     let a1 = Action::new(
@@ -74,9 +74,9 @@ pub enum MyAction {
     Eat,
 }
 
-let p1 = graphplan::Proposition::from_str("hungry");
+let p1 = graphplan::Proposition::from("hungry");
 let p2 = p1.negate();
-let p3 = graphplan::Proposition::from_str("thirsty");
+let p3 = graphplan::Proposition::from("thirsty");
 let p4 = p3.negate();
 
 let a1 = graphplan::Action::new(
@@ -107,7 +107,7 @@ pub enum MyAction {
     Move(LocationId),
 }
 
-let p1 = graphplan::Proposition::from_str("location1");
+let p1 = graphplan::Proposition::from("location1");
 
 let a1 = graphplan::Action::new(
   MyAction::Move(LocationId(String::from("1"))),
@@ -117,7 +117,37 @@ let a1 = graphplan::Action::new(
 
 ```
 
-Now the caller can access the associated data of an action (which is specific to your program) when doing something with a returned plan. This avoids a bunch of boilerplate by preventing the need for a bunch of wrapper code around GraphPlan actions and your program.
+Now the caller can access the associated data of an action (which is specific to your program) when doing something with a returned plan. This avoids a bunch of boilerplate by preventing the need for a wrapper around GraphPlan to map actions to your program.
+
+### Finite propositions
+
+The same thing applies to `Proposition`s, you can use your own type to use as an identifier.
+
+For example
+```rust
+#[derive(PartialEq, Clone, Hash, Eq)]
+enum MyPropositions {
+    A,
+    B,
+}
+
+impl From<MyPropositions> for graphplan::Proposition<MyPropositions> {
+    fn from(prop: MyPropositions) -> Self {
+        Self::new(prop, false)
+    }
+}
+
+let p1 = graphplan::Proposition::from(Props::A);
+let p2 = graphplan::Proposition::from(Props::B);
+
+// We can now use it with an action
+let action = graphplan::Action::new(
+  "my action ID",
+  hashset!{&p1},
+  hashset!{&p2},
+);
+
+```
 
 ## Running benchmarks
 
