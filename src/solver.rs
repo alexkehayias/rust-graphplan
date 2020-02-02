@@ -120,12 +120,12 @@ impl<ActionId: Ord + Clone + Hash + Debug + PartialEq,
             self.goals_met = false;
             let goal_idx = goal_len - 1;
             self.accum.remove(&goal_idx);
-            stack.push_front((goal_idx,));
+            stack.push_front(goal_idx);
         } else {
-            stack.push_front((0,));
+            stack.push_front(0);
         }
 
-        while let Some((goal_idx, )) = stack.pop_front() {
+        while let Some(goal_idx) = stack.pop_front() {
             let available_actions = if let Some(acts) = self.attempts.get(&goal_idx) {
                 acts.to_owned()
             } else {
@@ -179,7 +179,7 @@ impl<ActionId: Ord + Clone + Hash + Debug + PartialEq,
                 // can be retried with a new set of actions
                 self.attempts.remove(&goal_idx);
                 // Backtrack to the previous goal
-                stack.push_front((goal_idx - 1,));
+                stack.push_front(goal_idx - 1);
             } else {
                 let next_action = available_actions.iter().next().unwrap();
                 // TODO only add the action if the goal isn't met yet
@@ -200,7 +200,7 @@ impl<ActionId: Ord + Clone + Hash + Debug + PartialEq,
 
                 // Proceed to the next goal
                 if goal_idx < goal_len - 1 {
-                    stack.push_front((goal_idx + 1,));
+                    stack.push_front(goal_idx + 1);
                 } else {
                     self.goals_met = true;
                 }
