@@ -1,6 +1,6 @@
 [package]
 name = "graphplan"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Alex Kehayias <alex.kehayias@gmail.com>"]
 edition = "2018"
 description = "Implementation of the Graphplan planning algorithm from Avrim L. Blum and Merrick L. Furst in Rust"
@@ -32,7 +32,7 @@ categories = ["algorithms", "data-structures"]
 license = "EPL-1.0"
 
 [dev-dependencies]
-criterion = "0.2"
+criterion = "0.3"
 
 [dependencies]
 itertools = "0.8"
