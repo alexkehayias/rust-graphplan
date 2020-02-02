@@ -1,5 +1,7 @@
 # Graphplan
 
+![crates.io](https://img.shields.io/crates/v/graphplan.svg)
+
 Implementation of the Graphplan planning algorithm and Plangraph data structure written in Rust.
 
 Original paper: [Fast Planning Through Planning Graph Analysis](https://www.cs.cmu.edu/~avrim/Papers/graphplan.pdf) by Avrim L. Blum and Merrick L. Furst
