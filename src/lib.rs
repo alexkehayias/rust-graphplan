@@ -102,7 +102,7 @@ impl GraphPlan<String, String, SimpleSolver> {
                 )
             })
             .collect();
-        let solver = SimpleSolver::new();
+        let solver = SimpleSolver::default();
         GraphPlan::new(
             initial_props,
             goals,

@@ -154,7 +154,7 @@ let action = graphplan::Action::new(
 Benchmarks using `criterion` can be found in the `benches` directory. To run them:
 
 ```
-cargo bench
+cargo bench --features toml
 open target/criterion/report/index.html
 ```
 
