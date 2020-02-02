@@ -21,7 +21,7 @@ impl <T> Hash for PairSet<T> where T: Hash + Ord + Clone{
 
 impl <T> PartialEq for PairSet<T> where T: Ord + Clone{
     fn eq(&self, other: &PairSet<T>) -> bool {
-        &self.0 == &other.0 && &self.1 == &other.1 || &self.1 == &other.0 && &self.0 == &other.1
+        self.0 == other.0 && self.1 == other.1 || self.1 == other.0 && self.0 == other.1
     }
 }
 

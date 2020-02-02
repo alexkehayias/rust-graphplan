@@ -1,14 +1,17 @@
 use std::fmt;
-use std::hash::{Hash,Hasher};
+use std::fmt::{Debug, Display};
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone)]
-pub struct Proposition<PropositionId> {
+
+#[derive(Eq, Ord, PartialOrd, Clone)]
+pub struct Proposition<PropositionId> where PropositionId: Hash {
     pub id: PropositionId,
     pub negation: bool,
 }
 
-impl<PropositionId: fmt::Display> fmt::Debug for Proposition<PropositionId> {
+impl<PropositionId: Display + Hash> Debug for Proposition<PropositionId> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}P:{}", if self.negation {"¬"} else {""}, self.id)
     }
@@ -21,7 +24,17 @@ impl<PropositionId: Hash> Hash for Proposition<PropositionId> {
     }
 }
 
-impl<PropositionId: Clone + PartialEq> Proposition<PropositionId> {
+impl<PropositionId: Hash> PartialEq for Proposition<PropositionId> {
+    fn eq(&self, other: &Self) -> bool {
+        let mut hasher_left = DefaultHasher::new();
+        let mut hasher_right = DefaultHasher::new();
+        self.hash(&mut hasher_left);
+        other.hash(&mut hasher_right);
+        hasher_left.finish() == hasher_right.finish()
+    }
+}
+
+impl<PropositionId: Clone + PartialEq + Hash> Proposition<PropositionId> {
     pub fn new(id: PropositionId, negation: bool) -> Self {
         Proposition {id, negation}
     }

@@ -18,13 +18,8 @@ pub trait GraphPlanSolver<ActionId: Hash + Ord + Clone + Debug,
     fn search(&self, plangraph: &PlanGraph<ActionId, PropositionId>) -> Option<Solution<ActionId, PropositionId>>;
 }
 
+#[derive(Default)]
 pub struct SimpleSolver;
-
-impl SimpleSolver {
-    pub fn new() -> SimpleSolver {
-        SimpleSolver {}
-    }
-}
 
 type GoalIndex = usize;
 type Attempts<ActionId, PropositionId> = HashMap<usize, BTreeSet<Action<ActionId, PropositionId>>>;
@@ -41,7 +36,6 @@ impl<ActionId: Clone + Hash + Eq + Debug,
     pub fn as_set(&self) -> HashSet<Action<ActionId, PropositionId>> {
         self.0.values()
             .cloned()
-            .into_iter()
             .collect()
     }
 
@@ -49,7 +43,6 @@ impl<ActionId: Clone + Hash + Eq + Debug,
     pub fn as_vec(&self) -> Vec<Action<ActionId, PropositionId>> {
         self.0.values()
             .cloned()
-            .into_iter()
             .collect()
     }
 }
@@ -168,7 +161,7 @@ impl<ActionId: Ord + Clone + Hash + Debug + PartialEq,
                     debug!("Checking pairs: {:?} against mutexes: {:?}", pairs, &self.meta.mutexes);
 
                     if let Some(muxes) = &self.meta.mutexes {
-                        if muxes.intersection(&pairs).collect::<Vec<_>>().is_empty() {
+                        if muxes.intersection(&pairs).next().is_none() {
                             available.insert(a.clone());
                         }
                     };
@@ -334,6 +327,8 @@ mod goal_set_action_generator_test {
     }
 }
 
+type SearchStack<ActionId, PropositionId> = VecDeque<(usize, Vec<Proposition<PropositionId>>, Option<ActionCombinationIterator<ActionId, PropositionId>>)>;
+
 impl<ActionId: Ord + Clone + Hash + Debug,
      PropositionId: Ord + Clone + Hash + Debug + Display>
     GraphPlanSolver<ActionId, PropositionId> for SimpleSolver {
@@ -343,7 +338,7 @@ impl<ActionId: Ord + Clone + Hash + Debug,
         let mut failed_goals_memo: HashSet<(usize, Vec<Proposition<PropositionId>>)> = HashSet::new();
 
         // Initialize the loop
-        let mut stack: VecDeque<(usize, Vec<Proposition<PropositionId>>, Option<ActionCombinationIterator<ActionId, PropositionId>>)> = VecDeque::new();
+        let mut stack: SearchStack<ActionId, PropositionId> = VecDeque::new();
         let init_goals = Vec::from_iter(plangraph.goals.clone());
         let init_layer_idx = plangraph.layers.len() - 1;
         let init_action_gen = None;
@@ -363,9 +358,9 @@ impl<ActionId: Ord + Clone + Hash + Debug,
                 .expect("Failed to get actions");
             let mutexes = plangraph.mutex_actions.get(&(idx - 1)).cloned();
             let mut gen = action_gen
-                .or(Some(GoalSetActionGenerator::new(goals.clone(),
-                                                     actions.clone(),
-                                                     mutexes).into_iter()))
+                .or_else(|| Some(GoalSetActionGenerator::new(goals.clone(),
+                                                             actions.clone(),
+                                                             mutexes).into_iter()))
                 .unwrap();
 
             if let Some(goal_actions) = gen.next() {
@@ -445,7 +440,7 @@ mod simple_solver_test {
         pg.extend();
         debug!("Plangraph: {:?}", pg);
 
-        let solver = SimpleSolver::new();
+        let solver = SimpleSolver::default();
         let expected = vec![hashset!{a1.clone()}, hashset!{a2.clone()}];
         let plan = solver.search(&pg);
         debug!("Plan: {:?}", plan);

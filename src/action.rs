@@ -1,17 +1,18 @@
 use std::cmp::{Ordering};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use crate::proposition::Proposition;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
-pub enum ActionType<ActionId, PropositionId: Display> {
+pub enum ActionType<ActionId, PropositionId: Display + Hash> {
     Action(ActionId),
     Maintenance(Proposition<PropositionId>)
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Action<ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq> {
+#[derive(Eq, Clone, Debug)]
+pub struct Action<ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq + Clone> {
     pub id: ActionType<ActionId, PropositionId>,
     pub reqs: HashSet<Proposition<PropositionId>>,
     pub effects: HashSet<Proposition<PropositionId>>,
@@ -20,19 +21,29 @@ pub struct Action<ActionId: Hash + Clone, PropositionId: Display + Hash + Partia
 /// Actions are hashed based on their id, that means you can't have
 /// two actions of the same id in a HashSet even if they have
 /// different reqs and effects
-impl<ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq> Hash for Action<ActionId, PropositionId> {
+impl<ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq + Clone> Hash for Action<ActionId, PropositionId> {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
         self.id.hash(state);
     }
 }
 
-impl<ActionId: Ord + Clone + Hash, PropositionId: Ord + PartialEq + Eq + Display + Hash> Ord for Action<ActionId, PropositionId> {
+impl<ActionId: Hash + Clone, PropositionId: Clone + Eq + Hash + Display> PartialEq for Action<ActionId, PropositionId> {
+    fn eq(&self, other: &Self) -> bool {
+        let mut hasher_left = DefaultHasher::new();
+        let mut hasher_right = DefaultHasher::new();
+        self.hash(&mut hasher_left);
+        other.hash(&mut hasher_right);
+        hasher_left.finish() == hasher_right.finish()
+    }
+}
+
+impl<ActionId: Ord + Clone + Hash, PropositionId: Ord + PartialEq + Eq + Display + Hash + Clone> Ord for Action<ActionId, PropositionId> {
     fn cmp(&self, other: &Self) -> Ordering {
         (self.id).cmp(&other.id)
     }
 }
 
-impl<ActionId: Hash + Ord + Clone, PropositionId: Ord + PartialEq + Eq + Display + Hash> PartialOrd for Action<ActionId, PropositionId> {
+impl<ActionId: Hash + Ord + Clone, PropositionId: Ord + PartialEq + Eq + Display + Hash + Clone> PartialOrd for Action<ActionId, PropositionId> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some((self.id).cmp(&other.id))
     }

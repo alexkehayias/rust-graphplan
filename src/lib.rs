@@ -60,7 +60,7 @@ impl<ActionId: Debug + Hash + Ord + Clone,
                solver: T) -> GraphPlan<ActionId, PropositionId, T> {
         let pg = PlanGraph::new(initial_props, goals, actions);
         GraphPlan {
-            solver: solver,
+            solver,
             plangraph: pg
         }
     }
@@ -148,7 +148,7 @@ mod integration_test {
             hashset!{p1, p2},
             hashset!{not_p1, not_p2},
             hashset!{a1, a2},
-            SimpleSolver::new()
+            SimpleSolver::default()
         );
         assert!(pg.search() != None, "Solution should not be None");
     }

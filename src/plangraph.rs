@@ -30,8 +30,8 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                actions: HashSet<Action<ActionId, PropositionId>>) -> Self {
         let init_layer = Layer::PropositionLayer(initial_props);
         PlanGraph {
-            goals: goals,
-            actions: actions,
+            goals,
+            actions,
             layers: vec![init_layer],
             mutex_props: HashMap::new(),
             mutex_actions: HashMap::new()
@@ -58,12 +58,12 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                             self.actions.iter()
                                 .filter(|action| {
                                     pairs(&action.reqs).intersection(&mp)
-                                        .collect::<Vec<_>>()
-                                        .is_empty()
+                                        .next()
+                                        .is_none()
                                 })
                                 .collect::<HashSet<&Action<_, _>>>()
                         })
-                        .unwrap_or(self.actions.iter().collect());
+                        .unwrap_or_else(|| self.actions.iter().collect());
 
                     let p_layer = Layer::PropositionLayer(props.to_owned());
                     let action_layer = Layer::from_layer(
@@ -105,7 +105,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                     );
                     self.layers.push(action_layer);
                     self.layers.push(prop_layer);
-                    self.mutex_props.insert(self.layers.len(), prop_mutexes.clone());
+                    self.mutex_props.insert(self.layers.len(), prop_mutexes);
                 }
             }
         } else {
@@ -130,7 +130,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                 match layer {
                     Layer::ActionLayer(actions) => {
                         let acts = actions
-                           .into_iter()
+                           .iter()
                            .cloned()
                            .collect::<BTreeSet<_>>();
                         Ok(acts)

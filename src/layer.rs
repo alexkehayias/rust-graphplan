@@ -115,7 +115,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
             // - Generate pairs of Action.reqs and compare them
             //   to proposition mutees
             // - Check for intersection with mutex props
-            if let Some(mx_props) = mutex_props.clone() {
+            if let Some(mx_props) = mutex_props {
                 let req_pairs = pairs_from_sets(a1.clone().reqs, a2.clone().reqs);
                 let competing_needs: HashSet<PairSet<Proposition<PropositionId>>> = req_pairs
                     .intersection(&mx_props)
