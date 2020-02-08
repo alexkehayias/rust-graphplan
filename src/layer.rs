@@ -197,9 +197,10 @@ mod from_layer_test {
     #[test]
     fn action_layer_from_proposition_layer() {
         let prop = Proposition::from("test");
-        let layer = Layer::<&str, &str>::PropositionLayer(hashset!{prop.clone()});
+        let action = Action::new_maintenance(&prop);
+        let layer = Layer::<&str, &str>::PropositionLayer(hashset!{&prop});
         let actual = Layer::from_layer(hashset!{}, &layer);
-        let expected = Layer::ActionLayer(hashset!{Action::new_maintenance(prop)});
+        let expected = Layer::ActionLayer(hashset!{&action});
         assert_eq!(expected, actual);
     }
 }
@@ -210,24 +211,20 @@ mod mutex_test {
 
     #[test]
     fn proposition_mutexes_due_to_negation() {
-        let props = hashset!{
-            Proposition::from("caffeinated"),
-            Proposition::from("caffeinated").negate(),
-            Proposition::from("tired"),
-        };
+        let p1 = Proposition::from("caffeinated");
+        let p2 = Proposition::from("caffeinated").negate();
+        let p3 = Proposition::from("tired");
+        let props = hashset!{&p1, &p2, &p3};
         let actions = hashset!{};
         let action_mutexes = MutexPairs::new();
-        let expected = hashset!{
-            PairSet(Proposition::from("caffeinated"),
-                    Proposition::from("caffeinated").negate())
-        };
+        let expected = hashset!{PairSet(&p1, &p2)};
 
         assert_eq!(
             expected,
             Layer::<&str, &str>::proposition_mutexes(
                 &props,
                 &actions,
-                Some(&action_mutexes)
+                Some(action_mutexes)
             )
         );
     }
@@ -236,24 +233,24 @@ mod mutex_test {
     fn proposition_mutexes_due_to_mutex_actions() {
         let p1 = Proposition::from("caffeinated");
         let p2 = Proposition::from("coffee");
-        let not_p2 = p2.negate();
+        let p3 = p2.negate();
         let actions = hashset!{};
         let a1 = Action::new(
             String::from("drink coffee"),
             hashset!{&p2},
-            hashset!{&p1, &not_p2},
+            hashset!{&p1, &p3},
         );
         let a2 = Action::new(
             String::from("make coffee"),
             hashset!{},
             hashset!{&p2},
         );
-        let action_mutexes = hashset!{PairSet(a1.clone(), a2.clone())};
-        let expected = hashset!{PairSet(p1.clone(), p2.clone())};
-        let props = hashset!{p1, p2};
+        let action_mutexes = hashset!{PairSet(&a1, &a2)};
+        let expected = hashset!{PairSet(&p1, &p2)};
+        let props = hashset!{&p1, &p2};
         assert_eq!(
             expected,
-            Layer::proposition_mutexes(&props, &actions, Some(&action_mutexes))
+            Layer::proposition_mutexes(&props, &actions, Some(action_mutexes))
         );
     }
 
@@ -272,12 +269,12 @@ mod mutex_test {
             hashset!{},
             hashset!{&prop}
         );
-        let actions = hashset!{a1.clone(), a2.clone()};
+        let actions = hashset!{&a1, &a2};
         let props = MutexPairs::new();
         let actual = Layer::action_mutexes(&actions, Some(&props));
 
         let mut expected = MutexPairs::new();
-        expected.insert(PairSet(a1, a2));
+        expected.insert(PairSet(&a1, &a2));
 
         assert_eq!(expected, actual);
     }
@@ -297,12 +294,12 @@ mod mutex_test {
             hashset!{&prop},
             hashset!{&not_prop}
         );
-        let actions = hashset!{a1.clone(), a2.clone()};
+        let actions = hashset!{&a1, &a2};
         let props = MutexPairs::new();
         let actual = Layer::action_mutexes(&actions, Some(&props));
 
         let mut expected = MutexPairs::new();
-        expected.insert(PairSet(a1, a2));
+        expected.insert(PairSet(&a1, &a2));
 
         assert_eq!(expected, actual);
     }
@@ -322,13 +319,13 @@ mod mutex_test {
             hashset!{&prop},
             hashset!{&not_prop}
         );
-        let actions = hashset!{a1.clone(), a2.clone()};
+        let actions = hashset!{&a1, &a2};
         let mut mutex_props = MutexPairs::new();
-        mutex_props.insert(PairSet(prop.clone(), prop.negate()));
+        mutex_props.insert(PairSet(&prop, &not_prop));
         let actual = Layer::action_mutexes(&actions, Some(&mutex_props));
 
         let mut expected = MutexPairs::new();
-        expected.insert(PairSet(a1, a2));
+        expected.insert(PairSet(&a1, &a2));
 
         assert_eq!(expected, actual);
     }

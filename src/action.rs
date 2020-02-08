@@ -111,11 +111,13 @@ mod test_action {
 
     #[test]
     fn maintenance_action_works() {
-        let m: Action<TestActionId, &str> = Action::new_maintenance(Proposition::from("test"));
-        let m2 = Action::new_maintenance(Proposition::from("test"));
-        assert_eq!(m, m2.clone());
+        let p1 = Proposition::from("test");
+        let p2 = Proposition::from("test2");
+        let m1: Action<TestActionId, &str> = Action::new_maintenance(&p1);
+        let m2 = Action::new_maintenance(&p1);
+        assert_eq!(m1, m2);
 
-        let m3 = Action::new_maintenance(Proposition::from("test2"));
+        let m3 = Action::new_maintenance(&p2);
         assert_ne!(m2, m3);
     }
 }
