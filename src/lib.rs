@@ -23,10 +23,10 @@ pub mod solver;
 mod layer;
 mod pairset;
 
-pub use crate::proposition::Proposition;
-pub use crate::action::Action;
-pub use crate::plangraph::{PlanGraph, Solution};
-pub use crate::solver::{GraphPlanSolver, SimpleSolver};
+// pub use crate::proposition::Proposition;
+// pub use crate::action::Action;
+// pub use crate::plangraph::{PlanGraph, Solution};
+// pub use crate::solver::{GraphPlanSolver, SimpleSolver};
 
 // #[cfg(any(feature = "toml", feature = "wasm"))]
 // #[derive(Deserialize)]

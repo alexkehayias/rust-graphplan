@@ -6,7 +6,7 @@ use crate::proposition::Proposition;
 use crate::action::{Action, ActionType};
 use crate::pairset::{pairs, PairSet};
 use crate::solver::GraphPlanSolver;
-use crate::layer::{Layer, MutexPairs};
+use crate::layer::{Layer, MutexPairs, ActionLayerData, PropositionLayerData};
 
 
 type LayerNumber = usize;
@@ -47,14 +47,17 @@ impl<'a,
     /// Extends the plangraph to depth i+1
     /// Inserts another action layer and proposition layer
     pub fn extend(&mut self) {
-        let length = self.layers.len();
-        let layer = self.layers.last()
+        let layers = &self.layers;
+        let actions = &self.actions;
+        let length = layers.len();
+
+        let layer = layers.last()
             .expect("Tried to extend a plangraph that is not initialized. Please use PlanGraph::new instead of instantiating it as a struct.");
 
         let mutex_props = self.mutex_props.get(&(length - 1));
         let actions_no_mutex_reqs = mutex_props
             .map(|mp| {
-                self.actions.iter()
+                actions//.iter()
                     // TODO: come back to this when actions.reqs is a set of
                     // borrowed props
                     // .filter(|action| {
@@ -63,27 +66,61 @@ impl<'a,
                     //         .next()
                     //         .is_none()
                     // })
-                    .map(|i| *i)
-                    .collect()
+                    //.map(|i| *i)
+                    //.collect()
             })
-            .unwrap_or_else(|| self.actions);
+            .unwrap_or_else(|| actions);
 
-        let action_layer = Layer::from_layer(
-            actions_no_mutex_reqs,
-            &layer
-        );
+        // TODO: For some reason from_layer messes up lifetime
+        // inference when called this way vs inlined
+        // let action_layer = Layer::from_layer(
+        //     actions_no_mutex_reqs,
+        //     &layer
+        // );
+        let action_layer = {
+            let layer_data = ActionLayerData::new();
 
-        let prop_layer = Layer::from_layer(
-            self.actions,
-            &action_layer
-        );
+            // TODO: come back to this when Action.reqs is a hashset of references
+            // for a in actions_no_mutex_reqs {
+            //     // Include action if it satisfies one or more props
+            //     if a.reqs.is_subset(props) {
+            //         layer_data.insert(a.to_owned());
+            //     }
+            // }
+
+            // TODO: Move creation of maintenance actions out of
+            // here otherwise it will conflict with the lifetime
+            // 'a
+            // Add in maintenance actions for all props
+            // for p in props {
+            //     layer_data.insert(Action::new_maintenance(p.to_owned()));
+            // }
+
+            Layer::ActionLayer(layer_data)
+        };
+
+        // let prop_layer = Layer::from_layer(
+        //     self.actions,
+        //     &action_layer
+        // );
+
+        let prop_layer = {
+            let mut layer_data = PropositionLayerData::new();
+            for a in actions {
+                for e in a.effects.iter() {
+                    layer_data.insert(e);
+                }
+            }
+
+            Layer::PropositionLayer(layer_data)
+        };
 
         let action_layer_actions = match &action_layer {
             Layer::ActionLayer(action_data) => action_data,
             _ => unreachable!("Tried to get actions from PropositionLayer")
         };
         let action_mutexes = Layer::action_mutexes(
-            &action_layer_actions,
+            action_layer_actions,
             mutex_props
         );
         self.mutex_actions.insert(
@@ -97,7 +134,7 @@ impl<'a,
         };
         let prop_mutexes = Layer::proposition_mutexes(
             prop_layer_props,
-            &action_layer_actions,
+            action_layer_actions,
             Some(action_mutexes)
         );
         self.mutex_props.insert(length, prop_mutexes);
@@ -115,7 +152,7 @@ impl<'a,
     }
 
     // Returns the actions at layer index as an ordered set
-    pub fn actions_at_layer(&self, index: usize) -> Result<BTreeSet<Action<ActionId, PropositionId>>, String> {
+    pub fn actions_at_layer(&self, index: usize) -> Result<BTreeSet<&Action<ActionId, PropositionId>>, String> {
         self.layers.get(index).map_or(
             Err(format!("Layer {} does not exist", index)),
             |layer| {

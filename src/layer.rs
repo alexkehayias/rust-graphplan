@@ -6,14 +6,14 @@ use crate::action::Action;
 use crate::pairset::{PairSet, pairs, pairs_from_sets};
 
 
-pub type ActionLayerData<ActionId, PropositionId> = HashSet<Action<ActionId, PropositionId>>;
+pub type ActionLayerData<'a, ActionId, PropositionId> = HashSet<&'a Action<ActionId, PropositionId>>;
 pub type PropositionLayerData<'a, PropositionId> = HashSet<&'a Proposition<PropositionId>>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub enum Layer<'a,
                ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display> {
-    ActionLayer(ActionLayerData<ActionId, PropositionId>),
+    ActionLayer(ActionLayerData<'a, ActionId, PropositionId>),
     PropositionLayer(PropositionLayerData<'a, PropositionId>),
 }
 
@@ -25,13 +25,14 @@ impl<'a,
     Layer<'a, ActionId, PropositionId> {
     /// Create a new layer from another. ActionLayer returns a
     /// PropositionLayer and PropositionLayer returns an ActionLayer
-    pub fn from_layer(all_actions: HashSet<&Action<ActionId, PropositionId>>, layer: &Layer<ActionId, PropositionId>) -> Layer<'a, ActionId, PropositionId> {
+    pub fn from_layer(all_actions: HashSet<&Action<ActionId, PropositionId>>,
+                      layer: &'a Layer<ActionId, PropositionId>) -> Layer<'a, ActionId, PropositionId> {
         match layer {
             Layer::ActionLayer(actions) => {
                 let mut layer_data = PropositionLayerData::new();
                 for a in actions {
                     for e in a.effects.iter() {
-                        layer_data.insert(e.clone());
+                        layer_data.insert(e);
                     }
                 }
 
@@ -40,30 +41,33 @@ impl<'a,
             Layer::PropositionLayer(props) => {
                 let mut layer_data = ActionLayerData::new();
 
-                for a in all_actions {
-                    // Include action if it satisfies one or more props
-                    if a.reqs.is_subset(&props) {
-                        layer_data.insert(a.to_owned());
-                    }
-                }
+                // TODO: come back to this when Action.reqs is a hashset of references
+                // for a in all_actions {
+                //     // Include action if it satisfies one or more props
+                //     if a.reqs.is_subset(props) {
+                //         layer_data.insert(a.to_owned());
+                //     }
+                // }
 
+                // TODO: Move creation of maintenance actions out of
+                // here otherwise it will conflict with the lifetime
+                // 'a
                 // Add in maintenance actions for all props
-                for p in props {
-                    layer_data.insert(Action::new_maintenance(p.to_owned()));
-                }
+                // for p in props {
+                //     layer_data.insert(Action::new_maintenance(p.to_owned()));
+                // }
 
                 Layer::ActionLayer(layer_data)
             },
         }
     }
 
-    pub fn action_mutexes(actions: &HashSet<Action<ActionId, PropositionId>>,
+    pub fn action_mutexes(actions: &HashSet<&'a Action<ActionId, PropositionId>>,
                           mutex_props: Option<&MutexPairs<&Proposition<PropositionId>>>)
                           -> MutexPairs<&'a Action<ActionId, PropositionId>> {
         let mut mutexes = MutexPairs::new();
-        let action_pairs = pairs(&actions);
 
-        for PairSet(a1, a2) in action_pairs {
+        for PairSet(a1, a2) in pairs(&actions) {
             // Inconsistent effects: The effect of one action is the
             // negation of another
             // - Negate the effects of one of the actions then check
@@ -118,15 +122,15 @@ impl<'a,
             //   to proposition mutees
             // - Check for intersection with mutex props
             if let Some(mx_props) = mutex_props {
-                let req_pairs = pairs_from_sets(a1.clone().reqs, a2.clone().reqs);
-                let competing_needs: HashSet<PairSet<Proposition<PropositionId>>> = req_pairs
-                    .intersection(&mx_props)
-                    .map(|i| i.to_owned())
-                    .collect();
+                // TODO: come back to this when Action.reqs is a set of references
+                // let req_pairs = pairs_from_sets(a1.clone().reqs, a2.clone().reqs);
+                // let competing_needs = req_pairs
+                //     .intersection(mx_props)
+                //     .collect();
 
-                if !competing_needs.is_empty() {
-                    mutexes.insert(PairSet(a1, a2));
-                }
+                // if !competing_needs.is_empty() {
+                //     mutexes.insert(PairSet(a1, a2));
+                // }
             }
         }
         mutexes
@@ -138,8 +142,8 @@ impl<'a,
     /// - They are negations of one another
     /// - All ways of achieving the propositions at are pairwise mutex
     pub fn proposition_mutexes(
-        props: &HashSet<&Proposition<PropositionId>>,
-        actions: &HashSet<Action<ActionId, PropositionId>>,
+        props: &HashSet<&'a Proposition<PropositionId>>,
+        actions: &HashSet<&Action<ActionId, PropositionId>>,
         mutex_actions: Option<MutexPairs<&Action<ActionId, PropositionId>>>,
     ) -> MutexPairs<&'a Proposition<PropositionId>> {
         let mut mutexes = MutexPairs::new();
@@ -148,7 +152,9 @@ impl<'a,
         for p in props.iter() {
             let not_p = p.negate();
             if props.contains(&not_p) {
-                mutexes.insert(PairSet(p.clone(), not_p.clone()));
+                // FIX this won't work because this is a
+                // reference to a owned prop in this scope
+                // mutexes.insert(PairSet(*p, &not_p));
             }
         }
 
@@ -159,21 +165,21 @@ impl<'a,
         // - If there is no difference then the props are mutex
         if let Some(mx_actions) = mutex_actions {
             for PairSet(p1, p2) in pairs(&props) {
-                let viable_acts: HashSet<Action<_, _>> = actions.iter()
+                let viable_acts: HashSet<&Action<_, _>> = actions.iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
                     .map(|a| a.to_owned())
                     .collect();
 
-                let viable_act_pairs: HashSet<PairSet<Action<_, _>>> = pairs(&viable_acts)
+                let viable_act_pairs: HashSet<PairSet<&Action<_, _>>> = pairs(&viable_acts)
                     .into_iter()
                     .collect();
 
                 let diff: HashSet<_> = viable_act_pairs
-                    .difference(mx_actions)
+                    .difference(&mx_actions)
                     .collect();
 
                 if diff.is_empty() && !mx_actions.is_empty() {
-                    mutexes.insert(PairSet(p1.clone(), p2.clone()));
+                    mutexes.insert(PairSet(p1, p2));
                 }
             }
         }
