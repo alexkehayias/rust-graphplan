@@ -55,9 +55,9 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
         }
     }
 
-    pub fn action_mutexes<'a>(actions: &HashSet<&'a Action<ActionId, PropositionId>>,
-                              mutex_props: Option<&MutexPairs<Proposition<PropositionId>>>)
-                              -> MutexPairs<&'a Action<ActionId, PropositionId>> {
+    pub fn action_mutexes(actions: &HashSet<Action<ActionId, PropositionId>>,
+                          mutex_props: Option<&MutexPairs<Proposition<PropositionId>>>)
+                          -> MutexPairs<Action<ActionId, PropositionId>> {
         let mut mutexes = MutexPairs::new();
         let action_pairs = pairs(&actions);
 
@@ -137,8 +137,8 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
     /// - All ways of achieving the propositions at are pairwise mutex
     pub fn proposition_mutexes(
         props: &HashSet<Proposition<PropositionId>>,
-        actions: &HashSet<&Action<ActionId, PropositionId>>,
-        mutex_actions: Option<&MutexPairs<&Action<ActionId, PropositionId>>>,
+        actions: &HashSet<Action<ActionId, PropositionId>>,
+        mutex_actions: Option<&MutexPairs<Action<ActionId, PropositionId>>>,
     ) -> MutexPairs<Proposition<PropositionId>> {
         let mut mutexes = MutexPairs::new();
 
@@ -157,12 +157,12 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
         // - If there is no difference then the props are mutex
         if let Some(mx_actions) = mutex_actions {
             for PairSet(p1, p2) in pairs(&props) {
-                let viable_acts: HashSet<&Action<_, _>> = actions.iter()
+                let viable_acts: HashSet<Action<_, _>> = actions.iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
                     .map(|a| a.to_owned())
                     .collect();
 
-                let viable_act_pairs: HashSet<PairSet<&Action<_, _>>> = pairs(&viable_acts)
+                let viable_act_pairs: HashSet<PairSet<Action<_, _>>> = pairs(&viable_acts)
                     .into_iter()
                     .collect();
 
@@ -237,7 +237,7 @@ mod mutex_test {
             hashset!{},
             hashset!{&p2},
         );
-        let action_mutexes = hashset!{PairSet(&a1, &a2)};
+        let action_mutexes = hashset!{PairSet(a1.clone(), a2.clone())};
         let expected = hashset!{PairSet(p1.clone(), p2.clone())};
         let props = hashset!{p1, p2};
         assert_eq!(
@@ -261,12 +261,12 @@ mod mutex_test {
             hashset!{},
             hashset!{&prop}
         );
-        let actions = hashset!{&a1, &a2};
+        let actions = hashset!{a1.clone(), a2.clone()};
         let props = MutexPairs::new();
         let actual = Layer::action_mutexes(&actions, Some(&props));
 
         let mut expected = MutexPairs::new();
-        expected.insert(PairSet(&a1, &a2));
+        expected.insert(PairSet(a1, a2));
 
         assert_eq!(expected, actual);
     }
@@ -286,12 +286,12 @@ mod mutex_test {
             hashset!{&prop},
             hashset!{&not_prop}
         );
-        let actions = hashset!{&a1, &a2};
+        let actions = hashset!{a1.clone(), a2.clone()};
         let props = MutexPairs::new();
         let actual = Layer::action_mutexes(&actions, Some(&props));
 
         let mut expected = MutexPairs::new();
-        expected.insert(PairSet(&a1, &a2));
+        expected.insert(PairSet(a1, a2));
 
         assert_eq!(expected, actual);
     }
@@ -311,13 +311,13 @@ mod mutex_test {
             hashset!{&prop},
             hashset!{&not_prop}
         );
-        let actions = hashset!{&a1, &a2};
+        let actions = hashset!{a1.clone(), a2.clone()};
         let mut mutex_props = MutexPairs::new();
         mutex_props.insert(PairSet(prop.clone(), prop.negate()));
         let actual = Layer::action_mutexes(&actions, Some(&mutex_props));
 
         let mut expected = MutexPairs::new();
-        expected.insert(PairSet(&a1, &a2));
+        expected.insert(PairSet(a1, a2));
 
         assert_eq!(expected, actual);
     }

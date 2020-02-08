@@ -49,13 +49,6 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
         let layer = self.layers.last()
             .expect("Tried to extend a plangraph that is not initialized. Please use PlanGraph::new instead of instantiating it as a struct.");
 
-        let props = match layer {
-            Layer::ActionLayer(_) => {
-                panic!("Tried to extend a plangraph from an ActionLayer which is not allowed")
-            },
-            Layer::PropositionLayer(props) => props,
-        };
-
         let mutex_props = self.mutex_props.get(&(length - 1));
         let actions_no_mutex_reqs = mutex_props
             .map(|mp| {
@@ -69,13 +62,19 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
             })
             .unwrap_or_else(|| self.actions.iter().collect());
 
-        let p_layer = Layer::PropositionLayer(props.to_owned());
         let action_layer = Layer::from_layer(
             actions_no_mutex_reqs,
-            &p_layer
+            &layer
         );
-        let action_layer_actions: HashSet<&Action<_, _>> = match &action_layer {
-            Layer::ActionLayer(action_data) => action_data.iter().collect(),
+
+
+        let prop_layer = Layer::from_layer(
+            self.actions.iter().collect(),
+            &action_layer
+        );
+
+        let action_layer_actions = match &action_layer {
+            Layer::ActionLayer(action_data) => action_data,
             _ => unreachable!("Tried to get actions from PropositionLayer")
         };
         let action_mutexes = Layer::action_mutexes(
@@ -93,23 +92,19 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                 .collect()
         );
 
-        let prop_layer = Layer::from_layer(
-            self.actions.iter().collect(),
-            &action_layer
-        );
         let prop_layer_props = match &prop_layer {
-            Layer::PropositionLayer(prop_data) => Some(prop_data),
+            Layer::PropositionLayer(prop_data) => prop_data,
             _ => unreachable!("Tried to get propositions from ActionLayerr")
         };
         let prop_mutexes = Layer::proposition_mutexes(
             // This shouldn't fail
-            &prop_layer_props.unwrap(),
+            &prop_layer_props,
             &action_layer_actions,
             Some(&action_mutexes)
         );
+        self.mutex_props.insert(length, prop_mutexes);
         self.layers.push(action_layer);
         self.layers.push(prop_layer);
-        self.mutex_props.insert(length, prop_mutexes);
     }
 
     /// Returns the depth of the planning graph
