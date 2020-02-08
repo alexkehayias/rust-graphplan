@@ -13,21 +13,23 @@ type LayerNumber = usize;
 pub type Solution<ActionId, PropositionId> = Vec<HashSet<Action<ActionId, PropositionId>>>;
 
 #[derive(Debug)]
-pub struct PlanGraph<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
+pub struct PlanGraph<'a,
+                     ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                      PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display> {
-    pub goals: HashSet<Proposition<PropositionId>>,
-    pub actions: HashSet<Action<ActionId, PropositionId>>,
-    pub layers: Vec<Layer<ActionId, PropositionId>>,
-    pub mutex_props: HashMap<LayerNumber, MutexPairs<Proposition<PropositionId>>>,
-    pub mutex_actions: HashMap<LayerNumber, MutexPairs<Action<ActionId, PropositionId>>>,
+    pub goals: HashSet<&'a Proposition<PropositionId>>,
+    pub actions: HashSet<&'a Action<ActionId, PropositionId>>,
+    pub layers: Vec<Layer<'a, ActionId, PropositionId>>,
+    pub mutex_props: HashMap<LayerNumber, MutexPairs<&'a Proposition<PropositionId>>>,
+    pub mutex_actions: HashMap<LayerNumber, MutexPairs<&'a Action<ActionId, PropositionId>>>,
 }
 
-impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
+impl<'a,
+     ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
      PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display>
-    PlanGraph<ActionId, PropositionId> {
-    pub fn new(initial_props: HashSet<Proposition<PropositionId>>,
-               goals: HashSet<Proposition<PropositionId>>,
-               actions: HashSet<Action<ActionId, PropositionId>>) -> Self {
+    PlanGraph<'a, ActionId, PropositionId> {
+    pub fn new(initial_props: HashSet<&'a Proposition<PropositionId>>,
+               goals: HashSet<&'a Proposition<PropositionId>>,
+               actions: HashSet<&'a Action<ActionId, PropositionId>>) -> Self {
         let init_layer = Layer::PropositionLayer(initial_props);
         PlanGraph {
             goals,
@@ -38,7 +40,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
         }
     }
 
-    pub fn push(&mut self, layer: Layer<ActionId, PropositionId>) {
+    pub fn push(&mut self, layer: Layer<'a, ActionId, PropositionId>) {
         self.layers.push(layer)
     }
 
@@ -53,23 +55,26 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
         let actions_no_mutex_reqs = mutex_props
             .map(|mp| {
                 self.actions.iter()
-                    .filter(|action| {
-                        pairs(&action.reqs).intersection(&mp)
-                            .next()
-                            .is_none()
-                    })
-                    .collect::<HashSet<&Action<_, _>>>()
+                    // TODO: come back to this when actions.reqs is a set of
+                    // borrowed props
+                    // .filter(|action| {
+                    //     pairs(&action.reqs)
+                    //         .intersection(mp)
+                    //         .next()
+                    //         .is_none()
+                    // })
+                    .map(|i| *i)
+                    .collect()
             })
-            .unwrap_or_else(|| self.actions.iter().collect());
+            .unwrap_or_else(|| self.actions);
 
         let action_layer = Layer::from_layer(
             actions_no_mutex_reqs,
             &layer
         );
 
-
         let prop_layer = Layer::from_layer(
-            self.actions.iter().collect(),
+            self.actions,
             &action_layer
         );
 
@@ -83,13 +88,7 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
         );
         self.mutex_actions.insert(
             length,
-            action_mutexes.clone()
-                .into_iter()
-                .map(|i| {
-                    let PairSet(a, b) = i;
-                    PairSet(a.to_owned(), b.to_owned())
-                })
-                .collect()
+            action_mutexes.clone().into_iter().collect()
         );
 
         let prop_layer_props = match &prop_layer {
@@ -97,10 +96,9 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
             _ => unreachable!("Tried to get propositions from ActionLayerr")
         };
         let prop_mutexes = Layer::proposition_mutexes(
-            // This shouldn't fail
-            &prop_layer_props,
+            prop_layer_props,
             &action_layer_actions,
-            Some(&action_mutexes)
+            Some(action_mutexes)
         );
         self.mutex_props.insert(length, prop_mutexes);
         self.layers.push(action_layer);

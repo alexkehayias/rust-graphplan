@@ -7,23 +7,25 @@ use crate::pairset::{PairSet, pairs, pairs_from_sets};
 
 
 pub type ActionLayerData<ActionId, PropositionId> = HashSet<Action<ActionId, PropositionId>>;
-pub type PropositionLayerData<PropositionId> = HashSet<Proposition<PropositionId>>;
+pub type PropositionLayerData<'a, PropositionId> = HashSet<&'a Proposition<PropositionId>>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
-pub enum Layer<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
+pub enum Layer<'a,
+               ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display> {
     ActionLayer(ActionLayerData<ActionId, PropositionId>),
-    PropositionLayer(PropositionLayerData<PropositionId>),
+    PropositionLayer(PropositionLayerData<'a, PropositionId>),
 }
 
 pub type MutexPairs<T> = HashSet<PairSet<T>>;
 
-impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
+impl<'a,
+     ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
      PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display>
-    Layer<ActionId, PropositionId> {
+    Layer<'a, ActionId, PropositionId> {
     /// Create a new layer from another. ActionLayer returns a
     /// PropositionLayer and PropositionLayer returns an ActionLayer
-    pub fn from_layer(all_actions: HashSet<&Action<ActionId, PropositionId>>, layer: &Layer<ActionId, PropositionId>) -> Layer<ActionId, PropositionId> {
+    pub fn from_layer(all_actions: HashSet<&Action<ActionId, PropositionId>>, layer: &Layer<ActionId, PropositionId>) -> Layer<'a, ActionId, PropositionId> {
         match layer {
             Layer::ActionLayer(actions) => {
                 let mut layer_data = PropositionLayerData::new();
@@ -56,8 +58,8 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
     }
 
     pub fn action_mutexes(actions: &HashSet<Action<ActionId, PropositionId>>,
-                          mutex_props: Option<&MutexPairs<Proposition<PropositionId>>>)
-                          -> MutexPairs<Action<ActionId, PropositionId>> {
+                          mutex_props: Option<&MutexPairs<&Proposition<PropositionId>>>)
+                          -> MutexPairs<&'a Action<ActionId, PropositionId>> {
         let mut mutexes = MutexPairs::new();
         let action_pairs = pairs(&actions);
 
@@ -136,10 +138,10 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
     /// - They are negations of one another
     /// - All ways of achieving the propositions at are pairwise mutex
     pub fn proposition_mutexes(
-        props: &HashSet<Proposition<PropositionId>>,
+        props: &HashSet<&Proposition<PropositionId>>,
         actions: &HashSet<Action<ActionId, PropositionId>>,
-        mutex_actions: Option<&MutexPairs<Action<ActionId, PropositionId>>>,
-    ) -> MutexPairs<Proposition<PropositionId>> {
+        mutex_actions: Option<MutexPairs<&Action<ActionId, PropositionId>>>,
+    ) -> MutexPairs<&'a Proposition<PropositionId>> {
         let mut mutexes = MutexPairs::new();
 
         // Find mutexes due to negation
