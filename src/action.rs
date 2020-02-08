@@ -6,28 +6,28 @@ use std::collections::HashSet;
 use crate::proposition::Proposition;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
-pub enum ActionType<ActionId, PropositionId: Display + Hash> {
+pub enum ActionType<'a, ActionId, PropositionId: Display + Hash> {
     Action(ActionId),
-    Maintenance(Proposition<PropositionId>)
+    Maintenance(&'a Proposition<PropositionId>)
 }
 
 #[derive(Eq, Clone, Debug)]
-pub struct Action<ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq + Clone> {
-    pub id: ActionType<ActionId, PropositionId>,
-    pub reqs: HashSet<Proposition<PropositionId>>,
-    pub effects: HashSet<Proposition<PropositionId>>,
+pub struct Action<'a, ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq + Clone> {
+    pub id: ActionType<'a, ActionId, PropositionId>,
+    pub reqs: HashSet<&'a Proposition<PropositionId>>,
+    pub effects: HashSet<&'a Proposition<PropositionId>>,
 }
 
 /// Actions are hashed based on their id, that means you can't have
 /// two actions of the same id in a HashSet even if they have
 /// different reqs and effects
-impl<ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq + Clone> Hash for Action<ActionId, PropositionId> {
+impl<'a, ActionId: Hash + Clone, PropositionId: Display + Hash + PartialEq + Eq + Clone> Hash for Action<'a, ActionId, PropositionId> {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
         self.id.hash(state);
     }
 }
 
-impl<ActionId: Hash + Clone, PropositionId: Clone + Eq + Hash + Display> PartialEq for Action<ActionId, PropositionId> {
+impl<'a, ActionId: Hash + Clone, PropositionId: Clone + Eq + Hash + Display> PartialEq for Action<'a, ActionId, PropositionId> {
     fn eq(&self, other: &Self) -> bool {
         let mut hasher_left = DefaultHasher::new();
         let mut hasher_right = DefaultHasher::new();
@@ -37,31 +37,34 @@ impl<ActionId: Hash + Clone, PropositionId: Clone + Eq + Hash + Display> Partial
     }
 }
 
-impl<ActionId: Ord + Clone + Hash, PropositionId: Ord + PartialEq + Eq + Display + Hash + Clone> Ord for Action<ActionId, PropositionId> {
+impl<'a, ActionId: Ord + Clone + Hash, PropositionId: Ord + PartialEq + Eq + Display + Hash + Clone> Ord for Action<'a, ActionId, PropositionId> {
     fn cmp(&self, other: &Self) -> Ordering {
         (self.id).cmp(&other.id)
     }
 }
 
-impl<ActionId: Hash + Ord + Clone, PropositionId: Ord + PartialEq + Eq + Display + Hash + Clone> PartialOrd for Action<ActionId, PropositionId> {
+impl<'a, ActionId: Hash + Ord + Clone, PropositionId: Ord + PartialEq + Eq + Display + Hash + Clone> PartialOrd for Action<'a, ActionId, PropositionId> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some((self.id).cmp(&other.id))
     }
 }
 
-impl<ActionId: Hash + Clone, PropositionId: Display + Hash + Clone + PartialEq + Eq> Action<ActionId, PropositionId> {
-    pub fn new(id: ActionId, reqs: HashSet<&Proposition<PropositionId>>, effects: HashSet<&Proposition<PropositionId>>) -> Action<ActionId, PropositionId> {
+impl<'a, ActionId: Hash + Clone, PropositionId: Display + Hash + Clone + PartialEq + Eq> Action<'a, ActionId, PropositionId> {
+    pub fn new(id: ActionId,
+               reqs: HashSet<&'a Proposition<PropositionId>>,
+               effects: HashSet<&'a Proposition<PropositionId>>)
+               -> Action<'a, ActionId, PropositionId> {
         Action {
             id: ActionType::Action(id),
-            reqs: reqs.into_iter().map(|i| i.to_owned()).collect(),
-            effects: effects.into_iter().map(|i| i.to_owned()).collect(),
+            reqs: reqs,
+            effects: effects,
         }
     }
 
-    pub fn new_maintenance(prop: Proposition<PropositionId>) -> Action<ActionId, PropositionId> {
+    pub fn new_maintenance(prop: &'a Proposition<PropositionId>) -> Action<'a, ActionId, PropositionId> {
         Action {
-            id: ActionType::Maintenance(prop.clone()),
-            reqs: hashset!{prop.clone()},
+            id: ActionType::Maintenance(prop),
+            reqs: hashset!{prop},
             effects: hashset!{prop},
         }
     }

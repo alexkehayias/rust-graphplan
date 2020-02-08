@@ -10,17 +10,17 @@ use crate::layer::{Layer, MutexPairs, ActionLayerData, PropositionLayerData};
 
 
 type LayerNumber = usize;
-pub type Solution<ActionId, PropositionId> = Vec<HashSet<Action<ActionId, PropositionId>>>;
+pub type Solution<'a, ActionId, PropositionId> = Vec<HashSet<Action<'a, ActionId, PropositionId>>>;
 
 #[derive(Debug)]
 pub struct PlanGraph<'a,
                      ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                      PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display> {
     pub goals: HashSet<&'a Proposition<PropositionId>>,
-    pub actions: HashSet<&'a Action<ActionId, PropositionId>>,
+    pub actions: HashSet<&'a Action<'a, ActionId, PropositionId>>,
     pub layers: Vec<Layer<'a, ActionId, PropositionId>>,
     pub mutex_props: HashMap<LayerNumber, MutexPairs<&'a Proposition<PropositionId>>>,
-    pub mutex_actions: HashMap<LayerNumber, MutexPairs<&'a Action<ActionId, PropositionId>>>,
+    pub mutex_actions: HashMap<LayerNumber, MutexPairs<&'a Action<'a, ActionId, PropositionId>>>,
 }
 
 impl<'a,
@@ -55,21 +55,21 @@ impl<'a,
             .expect("Tried to extend a plangraph that is not initialized. Please use PlanGraph::new instead of instantiating it as a struct.");
 
         let mutex_props = self.mutex_props.get(&(length - 1));
-        let actions_no_mutex_reqs = mutex_props
-            .map(|mp| {
-                actions//.iter()
-                    // TODO: come back to this when actions.reqs is a set of
-                    // borrowed props
-                    // .filter(|action| {
-                    //     pairs(&action.reqs)
-                    //         .intersection(mp)
-                    //         .next()
-                    //         .is_none()
-                    // })
-                    //.map(|i| *i)
-                    //.collect()
-            })
-            .unwrap_or_else(|| actions);
+        let actions_no_mutex_reqs = if let Some(mux) = mutex_props {
+            // Filter out the actions that we know are mutex
+            actions
+                .iter()
+                .filter(|a| {
+                    pairs(&a.reqs)
+                        .intersection(mux)
+                        .next()
+                        .is_none()})
+                .map(|i| *i)
+                .collect::<HashSet<&'a Action<'a, ActionId, PropositionId>>>()
+        } else {
+            actions.to_owned()
+        };
+
 
         // TODO: For some reason from_layer messes up lifetime
         // inference when called this way vs inlined
@@ -77,16 +77,19 @@ impl<'a,
         //     actions_no_mutex_reqs,
         //     &layer
         // );
+        let props = match layer {
+            Layer::PropositionLayer(props) => props,
+            _ => unreachable!()
+        };
         let action_layer = {
-            let layer_data = ActionLayerData::new();
+            let mut layer_data = ActionLayerData::new();
 
-            // TODO: come back to this when Action.reqs is a hashset of references
-            // for a in actions_no_mutex_reqs {
-            //     // Include action if it satisfies one or more props
-            //     if a.reqs.is_subset(props) {
-            //         layer_data.insert(a.to_owned());
-            //     }
-            // }
+            for a in actions_no_mutex_reqs {
+                // Include action if it satisfies one or more props
+                if a.reqs.is_subset(props) {
+                    layer_data.insert(a);
+                }
+            }
 
             // TODO: Move creation of maintenance actions out of
             // here otherwise it will conflict with the lifetime
@@ -216,7 +219,7 @@ impl<'a,
     /// Searches the planning graph for a solution using the solver if
     /// there is no solution, extends the graph to depth i+1 and tries
     /// to solve again
-    pub fn search_with<T>(&mut self, solver: &T) -> Option<Solution<ActionId, PropositionId>>
+    pub fn search_with<T>(&mut self, solver: &'a T) -> Option<Solution<'a, ActionId, PropositionId>>
     where T: GraphPlanSolver<ActionId, PropositionId> {
         let mut tries = 0;
         let mut solution = None;
