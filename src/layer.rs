@@ -167,20 +167,19 @@ impl<'a,
         // - If there is no difference then the props are mutex
         if let Some(mx_actions) = mutex_actions {
             for PairSet(p1, p2) in pairs(&props) {
-                let viable_acts: HashSet<&Action<_, _>> = actions.iter()
+                let viable_acts = actions.iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
-                    .map(|a| a.to_owned())
+                    .map(|a| *a)
                     .collect();
 
-                let viable_act_pairs: HashSet<PairSet<&Action<_, _>>> = pairs(&viable_acts)
-                    .into_iter()
-                    .collect();
+                let viable_act_pairs = pairs(&viable_acts);
 
-                let diff: HashSet<_> = viable_act_pairs
+                let no_diff = viable_act_pairs
                     .difference(&mx_actions)
-                    .collect();
+                    .next()
+                    .is_none();
 
-                if diff.is_empty() && !mx_actions.is_empty() {
+                if no_diff && mx_actions.iter().next().is_some() {
                     mutexes.insert(PairSet(p1, p2));
                 }
             }

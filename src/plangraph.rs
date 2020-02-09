@@ -4,7 +4,7 @@ use std::hash::Hash;
 use crate::proposition::Proposition;
 use crate::action::Action;
 use crate::pairset::pairs;
-use crate::layer::{Layer, MutexPairs, ActionLayerData, PropositionLayerData};
+use crate::layer::{Layer, MutexPairs};
 
 
 type LayerNumber = usize;
