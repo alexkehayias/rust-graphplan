@@ -68,53 +68,15 @@ impl<'a,
             actions.to_owned()
         };
 
+        let action_layer = Layer::from_layer(
+            &actions_no_mutex_reqs,
+            &layer
+        );
 
-        // TODO: For some reason from_layer messes up lifetime
-        // inference when called this way vs inlined
-        // let action_layer = Layer::from_layer(
-        //     actions_no_mutex_reqs,
-        //     &layer
-        // );
-        let props = match layer {
-            Layer::PropositionLayer(props) => props,
-            _ => unreachable!()
-        };
-        let action_layer = {
-            let mut layer_data = ActionLayerData::new();
-
-            for a in actions_no_mutex_reqs {
-                // Include action if it satisfies one or more props
-                if a.reqs.is_subset(props) {
-                    layer_data.insert(a);
-                }
-            }
-
-            // TODO: Move creation of maintenance actions out of
-            // here otherwise it will conflict with the lifetime
-            // 'a
-            // Add in maintenance actions for all props
-            // for p in props {
-            //     layer_data.insert(Action::new_maintenance(p.to_owned()));
-            // }
-
-            Layer::ActionLayer(layer_data)
-        };
-
-        // let prop_layer = Layer::from_layer(
-        //     self.actions,
-        //     &action_layer
-        // );
-
-        let prop_layer = {
-            let mut layer_data = PropositionLayerData::new();
-            for a in actions {
-                for e in a.effects.iter() {
-                    layer_data.insert(e);
-                }
-            }
-
-            Layer::PropositionLayer(layer_data)
-        };
+        let prop_layer = Layer::from_layer(
+            &actions,
+            &action_layer
+        );
 
         let action_layer_actions = match &action_layer {
             Layer::ActionLayer(action_data) => action_data,

@@ -25,8 +25,8 @@ impl<'a,
     Layer<'a, ActionId, PropositionId> {
     /// Create a new layer from another. ActionLayer returns a
     /// PropositionLayer and PropositionLayer returns an ActionLayer
-    pub fn from_layer(all_actions: HashSet<&'a Action<ActionId, PropositionId>>,
-                      layer: &'a Layer<ActionId, PropositionId>) -> Layer<'a, ActionId, PropositionId> {
+    pub fn from_layer<'b>(all_actions: &'b HashSet<&'a Action<ActionId, PropositionId>>,
+                          layer: &'b Layer<'a, ActionId, PropositionId>) -> Layer<'a, ActionId, PropositionId> {
         match layer {
             Layer::ActionLayer(actions) => {
                 let mut layer_data = PropositionLayerData::new();
@@ -198,7 +198,8 @@ mod from_layer_test {
         let prop = Proposition::from("test");
         let action = Action::new_maintenance(&prop);
         let layer = Layer::<&str, &str>::PropositionLayer(hashset!{&prop});
-        let actual = Layer::from_layer(hashset!{}, &layer);
+        let actions = hashset!{&action};
+        let actual = Layer::from_layer(&actions, &layer);
         let expected = Layer::ActionLayer(hashset!{&action});
         assert_eq!(expected, actual);
     }
