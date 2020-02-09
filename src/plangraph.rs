@@ -10,7 +10,7 @@ use crate::layer::{Layer, MutexPairs, ActionLayerData, PropositionLayerData};
 
 
 type LayerNumber = usize;
-pub type Solution<'a, ActionId, PropositionId> = Vec<HashSet<Action<'a, ActionId, PropositionId>>>;
+pub type Solution<'a, ActionId, PropositionId> = Vec<HashSet<&'a Action<'a, ActionId, PropositionId>>>;
 
 #[derive(Debug)]
 pub struct PlanGraph<'a,
@@ -214,50 +214,5 @@ impl<'a,
         } else {
             false
         }
-    }
-
-    /// Searches the planning graph for a solution using the solver if
-    /// there is no solution, extends the graph to depth i+1 and tries
-    /// to solve again
-    pub fn search_with<T>(&mut self, solver: &'a T) -> Option<Solution<'a, ActionId, PropositionId>>
-    where T: GraphPlanSolver<ActionId, PropositionId> {
-        let mut tries = 0;
-        let mut solution = None;
-        let max_tries = self.actions.len() + 1;
-
-        while tries < max_tries {
-            // This doesn't provide early termination for _all_
-            // cases that won't yield a solution.
-            if self.has_leveled_off() {
-                break;
-            }
-            if self.has_possible_solution() {
-                if let Some(s) = solver.search(self) {
-                    solution = Some(s);
-                    break;
-                } else {
-                    debug!("No solution found at depth {}", self.depth());
-                    self.extend();
-                    tries += 1
-                }
-            } else {
-                debug!("No solution exists at depth {}", self.depth());
-                self.extend();
-                tries += 1;
-            }
-        };
-        solution
-    }
-
-    /// Takes a solution and filters out maintenance actions
-    pub fn format_plan(solution: Solution<ActionId, PropositionId>) -> Solution<ActionId, PropositionId> {
-        solution.iter()
-            .map(|s| s.iter()
-                 .filter(|i| match i.id {
-                     ActionType::Action(_) => true,
-                     ActionType::Maintenance(_) => false})
-                 .cloned()
-                 .collect())
-            .collect()
     }
 }
