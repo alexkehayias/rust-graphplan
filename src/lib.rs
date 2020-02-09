@@ -118,41 +118,43 @@ impl<'a,
 
 impl<'a> GraphPlan<'a, String, String> {
     #[cfg(any(feature = "toml", feature = "wasm"))]
-    pub fn from_toml_string(string: String) -> (HashSet<Proposition<String>>, HashSet<Proposition<String>>, HashSet<Action<'a, String, String>>) {
-        let config: Config = toml::from_str(&string).expect("Fail");
-        let initial_props: HashSet<Proposition<String>> = config.initial
-            .iter()
-            .map(|i| Proposition::new(i.replace("not_", ""),
-                                      i.starts_with("not_")))
-            .collect();
-        let goals: HashSet<Proposition<String>> = config.goals
-            .iter()
-            .map(|i| Proposition::new(i.replace("not_", ""),
-                                      i.starts_with("not_")))
-            .collect();
-        let actions: HashSet<Action<String, String>> = config.actions
-            .iter()
-            .map(|i| {
-                let reqs: HashSet<Proposition<String>> = i.reqs.iter()
-                    .map(|r| Proposition::new(r.replace("not_", ""),
-                                              r.starts_with("not_")))
-                    .collect();
-                let effects: HashSet<Proposition<String>> = i.effects.iter()
-                    .map(|e| Proposition::new(e.replace("not_", ""),
-                                              e.starts_with("not_")))
-                    .collect();
-                Action::new(
-                    i.name.to_string(),
-                    reqs,
-                    effects
-                )
-            })
-            .collect();
-        (initial_props, goals, actions)
+    pub fn from_toml_string(string: String) -> GraphPlan<'a, String, String> {
+        unimplemented!();
+        // let config: Config = toml::from_str(&string).expect("Fail");
+        // let initial_props: HashSet<Proposition<String>> = config.initial
+        //     .iter()
+        //     .map(|i| Proposition::new(i.replace("not_", ""),
+        //                               i.starts_with("not_")))
+        //     .collect();
+        // let goals: HashSet<Proposition<String>> = config.goals
+        //     .iter()
+        //     .map(|i| Proposition::new(i.replace("not_", ""),
+        //                               i.starts_with("not_")))
+        //     .collect();
+        // let actions: HashSet<Action<String, String>> = config.actions
+        //     .iter()
+        //     .map(|i| {
+        //         let reqs: HashSet<Proposition<String>> = i.reqs.iter()
+        //             .map(|r| Proposition::new(r.replace("not_", ""),
+        //                                       r.starts_with("not_")))
+        //             .collect();
+        //         let effects: HashSet<Proposition<String>> = i.effects.iter()
+        //             .map(|e| Proposition::new(e.replace("not_", ""),
+        //                                       e.starts_with("not_")))
+        //             .collect();
+        //         Action::new(
+        //             i.name.to_string(),
+        //             reqs,
+        //             effects
+        //         )
+        //     })
+        //     .collect();
+        // (initial_props, goals, actions)
+        // GraphPlan::new(initial_props, goals, actions)
     }
 
     #[cfg(any(feature = "toml", feature = "wasm"))]
-    pub fn from_toml(filepath: String) -> (HashSet<Proposition<String>>, HashSet<Proposition<String>>, HashSet<Action<'a, String, String>>) {
+    pub fn from_toml(filepath: String) -> GraphPlan<'a, String, String> {
         let string = fs::read_to_string(filepath).expect("Failed to read file");
         GraphPlan::from_toml_string(string)
     }
@@ -195,8 +197,9 @@ mod integration_test {
     #[cfg(any(feature = "toml", feature = "wasm"))]
     #[test]
     fn load_from_toml_config() {
-        let path = String::from("resources/rocket_domain.toml");
-        let mut pg: GraphPlan<_, _, SimpleSolver> = GraphPlan::from_toml(path);
-        assert!(pg.search() != None, "Solution should not be None");
+        unimplemented!()
+        // let path = String::from("resources/rocket_domain.toml");
+        // let mut pg: GraphPlan<_, _, SimpleSolver> = GraphPlan::from_toml(path);
+        // assert!(pg.search() != None, "Solution should not be None");
     }
 }
