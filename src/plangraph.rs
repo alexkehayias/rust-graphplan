@@ -1,11 +1,9 @@
 use std::fmt::{Debug, Display};
 use std::collections::{HashMap, HashSet, BTreeSet};
 use std::hash::Hash;
-use log::{debug};
 use crate::proposition::Proposition;
-use crate::action::{Action, ActionType};
-use crate::pairset::{pairs, PairSet};
-use crate::solver::GraphPlanSolver;
+use crate::action::Action;
+use crate::pairset::pairs;
 use crate::layer::{Layer, MutexPairs, ActionLayerData, PropositionLayerData};
 
 
@@ -46,7 +44,7 @@ impl<'a,
 
     /// Extends the plangraph to depth i+1
     /// Inserts another action layer and proposition layer
-    pub fn extend(&mut self) {
+    pub fn extend(&mut self) -> &mut Self {
         let layers = &self.layers;
         let actions = &self.actions;
         let length = layers.len();
@@ -143,6 +141,8 @@ impl<'a,
         self.mutex_props.insert(length, prop_mutexes);
         self.layers.push(action_layer);
         self.layers.push(prop_layer);
+
+        self
     }
 
     /// Returns the depth of the planning graph
@@ -155,7 +155,7 @@ impl<'a,
     }
 
     // Returns the actions at layer index as an ordered set
-    pub fn actions_at_layer(&self, index: usize) -> Result<BTreeSet<&Action<ActionId, PropositionId>>, String> {
+    pub fn actions_at_layer(&self, index: usize) -> Result<BTreeSet<&'a Action<ActionId, PropositionId>>, String> {
         self.layers.get(index).map_or(
             Err(format!("Layer {} does not exist", index)),
             |layer| {
@@ -178,7 +178,7 @@ impl<'a,
 
     /// A solution is possible if all goals exist in the last
     /// proposition layer and are not mutex
-    fn has_possible_solution(&self) -> bool {
+    pub fn has_possible_solution(&self) -> bool {
         let goals = self.goals.clone();
         let last_layer_idx = self.layers.clone().len() - 1;
 
@@ -205,7 +205,7 @@ impl<'a,
 
     /// The graph is considered to have "leveled off" when proposition
     /// layer P and an adjacent proposition layer Q are equal
-    fn has_leveled_off(&self) -> bool {
+    pub fn has_leveled_off(&self) -> bool {
         let len = self.layers.len();
         if len > 2 as usize {
             let prop_layer = self.layers.get(len - 1).expect("Failed to get layer");

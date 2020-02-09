@@ -7,7 +7,7 @@ use itertools::Itertools;
 use crate::proposition::Proposition;
 use crate::action::Action;
 use crate::pairset::{pairs_from_sets};
-use crate::layer::{MutexPairs};
+use crate::layer::{MutexPairs, Layer};
 use crate::plangraph::{PlanGraph, Solution};
 
 
@@ -16,7 +16,7 @@ pub trait GraphPlanSolver<'a,
                           PropositionId: Hash + Ord + Clone + Debug + Display> {
     /// Searches a plangraph for a sequence of collection of actions
     /// that satisfy the goals
-    fn search(&self, plangraph: &'a PlanGraph<ActionId, PropositionId>) -> Option<Solution<'a, ActionId, PropositionId>>;
+    fn search<'b>(plangraph: &'b PlanGraph<'a, ActionId, PropositionId>) -> Option<Solution<'a, ActionId, PropositionId>>;
 }
 
 #[derive(Default)]
@@ -333,7 +333,7 @@ impl<'a,
      ActionId: Ord + Clone + Hash + Debug,
      PropositionId: Ord + Clone + Hash + Debug + Display>
     GraphPlanSolver<'a, ActionId, PropositionId> for SimpleSolver {
-    fn search(&self, plangraph: &'a PlanGraph<ActionId, PropositionId>) -> Option<Solution<'a, ActionId, PropositionId>> {
+    fn search<'b>(plangraph: &'b PlanGraph<'a, ActionId, PropositionId>) -> Option<Solution<'a, ActionId, PropositionId>> {
         let mut success = false;
         let mut plan = Vec::new();
         let mut failed_goals_memo: HashSet<(usize, Vec<&Proposition<PropositionId>>)> = HashSet::new();
@@ -355,8 +355,26 @@ impl<'a,
             }
 
             // Note: This is a btreeset so ordering is guaranteed
-            let actions = plangraph.actions_at_layer(idx - 1)
-                .expect("Failed to get actions");
+            // TODO: why doesn't it work when calling PlanGraph.actions_at_layer
+            let actions = plangraph.layers.get(idx - 1).map_or(
+                Err(format!("Layer {} does not exist", idx - 1)),
+                |layer| {
+                    match layer {
+                        Layer::ActionLayer(actions) => {
+                            let acts = actions
+                                .iter()
+                                .cloned()
+                                .collect::<BTreeSet<_>>();
+                            Ok(acts)
+                        },
+                        Layer::PropositionLayer(_) => {
+                            Err(format!("Tried to get actions from proposition layer {}",
+                                        idx - 1))
+                        }
+                    }
+                }
+            ).expect("Failed to get actions");
+
             let mutexes = plangraph.mutex_actions.get(&(idx - 1)).cloned();
             let mut gen = action_gen
                 .or_else(|| Some(GoalSetActionGenerator::new(goals.clone(),
@@ -446,9 +464,8 @@ mod simple_solver_test {
         pg.extend();
         pg.extend();
 
-        let solver = SimpleSolver::default();
         let expected = vec![hashset!{&a1}, hashset!{&a2}];
-        let actual = solver.search(&pg).unwrap();
+        let actual = SimpleSolver::search(&pg).unwrap();
         assert_eq!(expected, actual);
     }
 }
