@@ -41,7 +41,6 @@ impl<'a,
             Layer::PropositionLayer(props) => {
                 let mut layer_data = ActionLayerData::new();
 
-                // TODO: come back to this when Action.reqs is a hashset of references
                 for a in all_actions {
                     // Include action if it satisfies one or more props
                     if a.reqs.is_subset(props) {
