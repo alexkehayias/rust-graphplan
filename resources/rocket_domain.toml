@@ -5,7 +5,7 @@ initial = [
 
 goals = [
   "rocket1_location3",
-  "rocket1_location3",
+  "rocket2_location3",
 ]
 
 actions = [
