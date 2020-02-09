@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::collections::{HashSet};
 use crate::proposition::Proposition;
 use crate::action::Action;
-use crate::pairset::{PairSet, pairs, pairs_from_sets};
+use crate::pairset::{PairSet, pairs, pairs_from_borrowed_sets};
 
 
 pub type ActionLayerData<'a, ActionId, PropositionId> = HashSet<&'a Action<'a, ActionId, PropositionId>>;
@@ -124,7 +124,7 @@ impl<'a,
             //   to proposition mutees
             // - Check for intersection with mutex props
             if let Some(mx_props) = mutex_props {
-                let req_pairs = pairs_from_sets(a1.clone().reqs, a2.clone().reqs);
+                let req_pairs = pairs_from_borrowed_sets(&a1.reqs, &a2.reqs);
                 let competing_needs = req_pairs
                     .intersection(mx_props)
                     .next()

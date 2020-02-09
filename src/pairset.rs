@@ -102,6 +102,29 @@ pub fn pairs_from_sets<T: Eq + Hash + Clone + Ord>(
     accum
 }
 
+/// Returns the pairs of a set of items
+pub fn pairs_from_borrowed_sets<'p, T: Eq + Hash + Clone + Ord>(
+    items1: &HashSet<&'p T>,
+    items2: &HashSet<&'p T>,
+) -> HashSet<PairSet<&'p T>> {
+    let mut accum = HashSet::new();
+
+    let mut sorted1 = Vec::from_iter(items1.into_iter());
+    sorted1.sort();
+
+    let mut sorted2 = Vec::from_iter(items2.into_iter());
+    sorted2.sort();
+
+    for i in sorted1.iter() {
+        for j in sorted2.iter() {
+            if i != j {
+                accum.insert(PairSet(**i, **j));
+            }
+        }
+    }
+    accum
+}
+
 #[cfg(test)]
 mod pairs_test {
     use super::*;
