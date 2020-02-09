@@ -32,20 +32,6 @@ struct ActionCombination<'a,
     HashMap<GoalIndex, &'a Action<'a, ActionId, PropositionId>>
 );
 
-impl<'a,
-     ActionId: Clone + Hash + Eq + Debug,
-     PropositionId: Clone + Hash + Eq + Debug + Display>
-    ActionCombination<'a, ActionId, PropositionId> {
-    pub fn as_set(&self) -> HashSet<&'a Action<ActionId, PropositionId>> {
-        self.0.values().into_iter().map(|i| *i).collect()
-    }
-
-    #[allow(dead_code)]
-    pub fn as_vec(&self) -> Vec<&'a Action<ActionId, PropositionId>> {
-        self.0.values().into_iter().map(|i| *i).collect()
-    }
-}
-
 #[derive(Clone, Debug)]
 struct GoalSetActionGenerator<'a,
                               ActionId: Debug + Hash + Clone + Eq + Ord,
@@ -379,7 +365,7 @@ impl<'a,
                 .unwrap();
 
             if let Some(goal_actions) = gen.next() {
-                debug!("Actions: {:?} for goals: {:?}", goal_actions.as_set(), goals);
+                debug!("Actions: {:?} for goals: {:?}", goal_actions, goals);
                 // If we are are on the second to last proposition
                 // layer, we are done
 
