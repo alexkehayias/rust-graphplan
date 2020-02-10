@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Display};
-use std::collections::{HashMap, HashSet, BTreeSet};
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use crate::proposition::Proposition;
 use crate::action::Action;
@@ -114,28 +114,6 @@ impl<'a,
         } else {
             0
         }
-    }
-
-    // Returns the actions at layer index as an ordered set
-    pub fn actions_at_layer(&self, index: usize) -> Result<BTreeSet<&'a Action<ActionId, PropositionId>>, String> {
-        self.layers.get(index).map_or(
-            Err(format!("Layer {} does not exist", index)),
-            |layer| {
-                match layer {
-                    Layer::ActionLayer(actions) => {
-                        let acts = actions
-                           .iter()
-                           .cloned()
-                           .collect::<BTreeSet<_>>();
-                        Ok(acts)
-                    },
-                    Layer::PropositionLayer(_) => {
-                        Err(format!("Tried to get actions from proposition layer {}",
-                                    index))
-                    }
-                }
-            }
-        )
     }
 
     /// A solution is possible if all goals exist in the last

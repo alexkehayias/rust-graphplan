@@ -355,7 +355,7 @@ impl<'a,
             }
 
             // Note: This is a btreeset so ordering is guaranteed
-            // TODO: why doesn't it work when calling PlanGraph.actions_at_layer
+            // which makes the plans yielded deterministic
             let actions = plangraph.layers.get(idx - 1).map_or(
                 Err(format!("Layer {} does not exist", idx - 1)),
                 |layer| {

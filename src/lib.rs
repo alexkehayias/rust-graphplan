@@ -59,8 +59,6 @@ impl<'a,
                goals: HashSet<&'a Proposition<PropositionId>>,
                actions: HashSet<&'a Action<'a, ActionId, PropositionId>>)
                -> GraphPlan<'a, ActionId, PropositionId> {
-        // TODO: add in negated props for initial props and each
-        // actions req/effects
         // TODO: add in maintenance actions for all props
         let plangraph = PlanGraph::new(
             initial_props,
