@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet, BTreeSet, VecDeque};
 use log::{debug};
 use itertools::Itertools;
 use crate::proposition::Proposition;
-use crate::action::Action;
+use crate::action::{Action, ActionType};
 use crate::pairset::{pairs_from_sets};
 use crate::layer::{MutexPairs, Layer};
 use crate::plangraph::{PlanGraph, Solution};
@@ -386,9 +386,13 @@ impl<'a,
                 debug!("Actions: {:?} for goals: {:?}", goal_actions, goals);
                 // If we are are on the second to last proposition
                 // layer, we are done
-
                 let goal_action_set = goal_actions.0.values()
                     .into_iter()
+                    // Don't include maintenance actions in Solution
+                    .filter(|a| match a.id {
+                        ActionType::Action(_) => true,
+                        ActionType::Maintenance(_) => false
+                    })
                     .map(|i| *i)
                     .collect::<HashSet<&'a Action<ActionId, PropositionId>>>();
                 if (idx - 2) == 0 {
@@ -454,12 +458,19 @@ mod simple_solver_test {
             hashset!{&not_p2},
         );
 
+        let a3 = Action::new_maintenance(&p1);
+        let a4 = Action::new_maintenance(&not_p1);
+        let a5 = Action::new_maintenance(&p2);
+        let a6 = Action::new_maintenance(&not_p2);
+
+        let initial_props = hashset!{&p1, &p2};
         let goals = hashset!{&not_p1, &not_p2};
+        let actions = hashset!{&a1, &a2, &a3, &a4, &a5, &a6};
 
         let mut pg = PlanGraph::new(
-            hashset!{&p1, &p2},
+            initial_props,
             goals,
-            hashset!{&a1, &a2}
+            actions,
         );
         pg.extend();
         pg.extend();
