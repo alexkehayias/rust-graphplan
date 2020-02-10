@@ -134,7 +134,20 @@ impl<'a,
                     mutexes.insert(PairSet(a1, a2));
                 }
             }
+
+            // Conflicting requirements: Actions have preconditions
+            // that are negations of each other
+            // Note: moved this here rather than calculating in
+            // `proposition_mutexes` because we need to create owned
+            // structs via `Proposition.negate()`
+            for p in a1.reqs.iter() {
+                let not_p = p.negate();
+                if a2.reqs.contains(&not_p) {
+                    mutexes.insert(PairSet(a1, a2));
+                }
+            }
         }
+
         mutexes
     }
 
@@ -209,38 +222,18 @@ mod mutex_test {
     use super::*;
 
     #[test]
-    fn proposition_mutexes_due_to_negation() {
-        let p1 = Proposition::from("caffeinated");
-        let p2 = Proposition::from("caffeinated").negate();
-        let p3 = Proposition::from("tired");
-        let props = hashset!{&p1, &p2, &p3};
-        let actions = hashset!{};
-        let action_mutexes = MutexPairs::new();
-        let expected = hashset!{PairSet(&p1, &p2)};
-
-        assert_eq!(
-            expected,
-            Layer::<&str, &str>::proposition_mutexes(
-                &props,
-                &actions,
-                Some(action_mutexes)
-            )
-        );
-    }
-
-    #[test]
     fn proposition_mutexes_due_to_mutex_actions() {
         let p1 = Proposition::from("caffeinated");
         let p2 = Proposition::from("coffee");
         let p3 = p2.negate();
         let actions = hashset!{};
         let a1 = Action::new(
-            String::from("drink coffee"),
+            "drink coffee",
             hashset!{&p2},
             hashset!{&p1, &p3},
         );
         let a2 = Action::new(
-            String::from("make coffee"),
+            "make coffee",
             hashset!{},
             hashset!{&p2},
         );
@@ -258,13 +251,13 @@ mod mutex_test {
         let prop = Proposition::from("coffee");
         let not_prop = prop.negate();
         let a1 = Action::new(
-            String::from("drink coffee"),
+            "drink coffee",
             hashset!{},
             hashset!{&not_prop}
         );
 
         let a2 = Action::new(
-            String::from("make coffee"),
+            "make coffee",
             hashset!{},
             hashset!{&prop}
         );
@@ -283,13 +276,13 @@ mod mutex_test {
         let prop = Proposition::from("hungry");
         let not_prop = prop.negate();
         let a1 = Action::new(
-            String::from("eat sandwich"),
+            "eat sandwich",
             hashset!{&prop},
             hashset!{&not_prop}
         );
 
         let a2 = Action::new(
-            String::from("eat soup"),
+            "eat soup",
             hashset!{&prop},
             hashset!{&not_prop}
         );
@@ -308,13 +301,13 @@ mod mutex_test {
         let prop = Proposition::from("hungry");
         let not_prop = prop.negate();
         let a1 = Action::new(
-            String::from("eat sandwich"),
+            "eat sandwich",
             hashset!{&prop},
             hashset!{&not_prop}
         );
 
         let a2 = Action::new(
-            String::from("eat soup"),
+            "eat soup",
             hashset!{&prop},
             hashset!{&not_prop}
         );
@@ -322,6 +315,22 @@ mod mutex_test {
         let mut mutex_props = MutexPairs::new();
         mutex_props.insert(PairSet(&prop, &not_prop));
         let actual = Layer::action_mutexes(&actions, Some(&mutex_props));
+
+        let mut expected = MutexPairs::new();
+        expected.insert(PairSet(&a1, &a2));
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn action_mutexes_due_to_conflicting_reqs() {
+        let prop = Proposition::from("hungry");
+        let not_prop = prop.negate();
+        let a1 = Action::new("eat sandwich", hashset!{&prop}, hashset!{});
+        let a2 = Action::new("go to work", hashset!{&not_prop}, hashset!{});
+
+        let actions = hashset!{&a1, &a2};
+        let actual = Layer::action_mutexes(&actions, None);
 
         let mut expected = MutexPairs::new();
         expected.insert(PairSet(&a1, &a2));
