@@ -144,6 +144,7 @@ impl<'a,
                 let not_p = p.negate();
                 if a2.reqs.contains(&not_p) {
                     mutexes.insert(PairSet(a1, a2));
+                    break
                 }
             }
         }
