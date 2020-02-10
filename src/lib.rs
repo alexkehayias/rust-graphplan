@@ -186,10 +186,19 @@ mod integration_test {
             hashset!{&not_p2},
         );
 
+        let a3 = Action::new_maintenance(&p1);
+        let a4 = Action::new_maintenance(&not_p1);
+        let a5 = Action::new_maintenance(&p2);
+        let a6 = Action::new_maintenance(&not_p2);
+
+        let initial_props = hashset!{&p1, &p2};
+        let goals = hashset!{&not_p1, &not_p2};
+        let actions = hashset!{&a1, &a2, &a3, &a4, &a5, &a6};
+
         let mut pg = GraphPlan::<&str, &str>::new(
-            hashset!{&p1, &p2},
-            hashset!{&not_p1, &not_p2},
-            hashset!{&a1, &a2},
+            initial_props,
+            goals,
+            actions
         );
         assert!(pg.search::<SimpleSolver>() != None, "Solution should not be None");
     }
