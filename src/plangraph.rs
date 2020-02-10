@@ -120,7 +120,7 @@ impl<'a,
     /// proposition layer and are not mutex
     pub fn has_possible_solution(&self) -> bool {
         let goals = self.goals.clone();
-        let last_layer_idx = self.layers.clone().len() - 1;
+        let last_layer_idx = self.layers.len() - 1;
 
         if let Some(prop_layer) = self.layers.get(last_layer_idx) {
             match prop_layer {
