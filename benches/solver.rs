@@ -30,11 +30,12 @@ fn solver_benchmark(c: &mut Criterion) {
     );
 
     c.bench_function("solve 100", |b| b.iter(||{
-        let mut pg = GraphPlan::new(
+        let domain = GraphPlan::create_domain(
             hashset!{&p1, &p5},
             hashset!{&p3, &p6},
             hashset!{&a1, &a2, &a3}
         );
+        let mut pg = GraphPlan::from_domain(&domain);
         pg.search::<SimpleSolver>();
     }));
 }
