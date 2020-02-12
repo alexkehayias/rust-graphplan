@@ -9,9 +9,8 @@ fn solver_benchmark(c: &mut Criterion) {
     let p1 = Proposition::from("rocket1_location1");
     let p2 = Proposition::from("rocket1_location2");
     let p3 = Proposition::from("rocket1_location3");
-    let _p4 = Proposition::from("rocket2_location1");
-    let p5 = Proposition::from("rocket2_location2");
-    let p6 = Proposition::from("rocket2_location3");
+    let p4 = Proposition::from("rocket2_location2");
+    let p5 = Proposition::from("rocket2_location3");
 
     let a1 = Action::new(
        "move_rocket1_location2",
@@ -25,16 +24,17 @@ fn solver_benchmark(c: &mut Criterion) {
     );
     let a3 = Action::new(
        "move_rocket2_location3",
+       hashset!{&p4},
        hashset!{&p5},
-       hashset!{&p6},
+    );
+
+    let domain = GraphPlan::create_domain(
+        hashset!{&p1, &p4},
+        hashset!{&p3, &p5},
+        hashset!{&a1, &a2, &a3}
     );
 
     c.bench_function("solve 100", |b| b.iter(||{
-        let domain = GraphPlan::create_domain(
-            hashset!{&p1, &p5},
-            hashset!{&p3, &p6},
-            hashset!{&a1, &a2, &a3}
-        );
         let mut pg = GraphPlan::from_domain(&domain);
         pg.search::<SimpleSolver>();
     }));
