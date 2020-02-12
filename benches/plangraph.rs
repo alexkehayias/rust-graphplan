@@ -32,8 +32,9 @@ fn plangraph_benchmark(c: &mut Criterion) {
             hashset!{&not_p1, &not_p2, &p3},
             hashset!{&a1, &a2}
         );
-        for _ in 0..100 {
+        for i in 0..100 {
             pg.extend();
+            assert!(pg.depth() == i + 1);
         }
     }));
 }

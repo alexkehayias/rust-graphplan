@@ -36,7 +36,7 @@ fn solver_benchmark(c: &mut Criterion) {
 
     c.bench_function("solve 100", |b| b.iter(||{
         let mut pg = GraphPlan::from_domain(&domain);
-        pg.search::<SimpleSolver>();
+        assert!(pg.search::<SimpleSolver>().is_some());
     }));
 }
 
