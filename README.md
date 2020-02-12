@@ -6,64 +6,55 @@ Implementation of the Graphplan planning algorithm and Plangraph data structure 
 
 Original paper: [Fast Planning Through Planning Graph Analysis](https://www.cs.cmu.edu/~avrim/Papers/graphplan.pdf) by Avrim L. Blum and Merrick L. Furst
 
-## Usage
+## Example
 
-You can load a domain from a toml file (see the `resources/example.toml` directory for expected format) and instantiate a `GraphPlan`.
-
-Example:
+Below is an example plan you might put together using Graphplan. We describe the 'morning' domain as an initial state (called 'propositions'), actions (which have preconditions and effects which alter the state), and a goal state.
 
 ```rust
-#[macro_use] extern crate graphplan;
-use graphplan::GraphPlan;
-use graphplan::solver::SimpleSolver;
-use graphplan::plangraph::PlanGraph;
+let p1 = Proposition::from("tired");
+let not_p1 = p1.negate();
 
-fn main() -> () {
-    let path = String::from("resources/rocket_domain.toml");
-    let mut pg: GraphPlan<_, SimpleSolver> = GraphPlan::from_toml(path);
-    println!("Result: {:?}", PlanGraph::format_plan(pg.search()));
+let p2 = Proposition::from("dog needs to pee");
+let not_p2 = p2.negate();
+
+let p3 = Proposition::from("at work");
+let p4 = p3.negate();
+
+let a1 = Action::new(
+    "drink coffee",
+    hashset!{&p1},
+    hashset!{&not_p1}
+);
+
+let a2 = Action::new(
+    "walk dog",
+    hashset!{&p2, &not_p1},
+    hashset!{&not_p2},
+);
+
+let a3 = Action::new(
+    "go to work",
+    hashset!{&not_p1, &not_p2},
+    hashset!{&p3},
+);
+
+let domain = GraphPlan::create_domain(
+    hashset!{&p1, &p2, &p4},
+    hashset!{&not_p1, &not_p2, &p3},
+    hashset!{&a1, &a2, &a3}
+);
+let mut pg = GraphPlan::from_domain(&domain);
+
+println!("Plan:");
+
+for step in pg.search::<SimpleSolver>().unwrap() {
+    for action in step {
+        println!("- {:?}", action.id);
+    }
 }
 ```
 
-The lower level API allows you to constructing your own problem domain programmatically. You can also implement your own solver by implementing the `GraphPlanSolver` trait.
-
-Example:
-
-```rust
-#[macro_use] extern crate graphplan;
-use graphplan::GraphPlan;
-use graphplan::proposition::Proposition;
-use graphplan::action::Action;
-use graphplan::solver::SimpleSolver;
-
-fn main() -> () {
-    let p1 = Proposition::from("tired");
-    let not_p1 = p1.negate();
-    let p2 = Proposition::from("dog needs to pee");
-    let not_p2 = p2.negate();
-
-    let a1 = Action::new(
-        String::from("coffee"),
-        hashset!{&p1},
-        hashset!{&not_p1}
-    );
-
-    let a2 = Action::new(
-        String::from("walk dog"),
-        hashset!{&p2, &not_p1},
-        hashset!{&not_p2},
-    );
-
-    let mut pg = GraphPlan::new(
-        hashset!{p1, p2},
-        hashset!{not_p1, not_p2},
-        hashset!{a1, a2},
-        SimpleSolver::new()
-    );
-
-    println!("Result: {:?}", PlanGraph::format_plan(pg.search());
-}
-```
+## Advanced Usage
 
 ### Finite actions
 
@@ -76,18 +67,18 @@ pub enum MyAction {
     Eat,
 }
 
-let p1 = graphplan::Proposition::from("hungry");
+let p1 = Proposition::from("hungry");
 let p2 = p1.negate();
-let p3 = graphplan::Proposition::from("thirsty");
+let p3 = Proposition::from("thirsty");
 let p4 = p3.negate();
 
-let a1 = graphplan::Action::new(
+let a1 = Action::new(
   MyAction::Eat,
   hashset!{&p1},
   hashset!{&p2},
 );
 
-let a2 = graphplan::Action::new(
+let a2 = Action::new(
   MyAction::Drink,
   hashset!{&p3},
   hashset!{&p4},
@@ -109,9 +100,9 @@ pub enum MyAction {
     Move(LocationId),
 }
 
-let p1 = graphplan::Proposition::from("location1");
+let p1 = Proposition::from("location1");
 
-let a1 = graphplan::Action::new(
+let a1 = Action::new(
   MyAction::Move(LocationId(String::from("1"))),
   hashset!{},
   hashset!{&p1},
@@ -133,17 +124,17 @@ enum MyPropositions {
     B,
 }
 
-impl From<MyPropositions> for graphplan::Proposition<MyPropositions> {
+impl From<MyPropositions> for Proposition<MyPropositions> {
     fn from(prop: MyPropositions) -> Self {
         Self::new(prop, false)
     }
 }
 
-let p1 = graphplan::Proposition::from(Props::A);
-let p2 = graphplan::Proposition::from(Props::B);
+let p1 = Proposition::from(Props::A);
+let p2 = Proposition::from(Props::B);
 
 // We can now use it with an action
-let action = graphplan::Action::new(
+let action = Action::new(
   "my action ID",
   hashset!{&p1},
   hashset!{&p2},
@@ -160,16 +151,13 @@ cargo bench --features toml
 open target/criterion/report/index.html
 ```
 
-## Running the wasm demo
-
-This crate ships with a demo of running graphplan in the browser via wasm. To run it you will need to install the `cargo-web` plugin then run the following.
+## Running examples
 
 ```
-cargo web --features wasm
-open localhost:8000
+cargo run --example morning
 ```
 
-Open the js console and you can use the method `graphplan.run` to take a toml formatted string (see `resources/example.toml`) and return a plan if there is one.
+-------------------
 
 ## License
 
