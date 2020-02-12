@@ -1,19 +1,7 @@
 use std::collections::{HashSet};
 use std::hash::Hash;
 use std::fmt::{Debug, Display};
-
-#[cfg(any(feature = "toml", feature = "wasm"))]
-#[macro_use] extern crate serde_derive;
-
-#[cfg(any(feature = "toml", feature = "wasm"))]
-use std::fs;
-
-#[cfg(any(feature = "toml", feature = "wasm"))]
-extern crate serde;
-
-#[cfg(any(feature = "toml", feature = "wasm"))]
-use toml_crate as toml;
-
+use log::{debug};
 
 #[macro_use] pub mod macros;
 pub mod proposition;
@@ -24,97 +12,130 @@ mod layer;
 mod pairset;
 
 pub use crate::proposition::Proposition;
-pub use crate::action::Action;
+pub use crate::action::{Action, ActionType};
 pub use crate::plangraph::{PlanGraph, Solution};
 pub use crate::solver::{GraphPlanSolver, SimpleSolver};
 
-#[cfg(any(feature = "toml", feature = "wasm"))]
-#[derive(Deserialize)]
-struct Config {
-    initial: Vec<String>,
-    goals: Vec<String>,
-    actions: Vec<ConfigAction>
+
+/// Represents a planning domain that can generate a GraphPlan via
+/// `from_domain`. Serves as a helper object to prevent lifetime
+/// issues when auto generating things like maintenance actions
+pub struct Domain<'a,
+                  ActionId: Debug + Hash + Ord + Clone,
+                  PropositionId: Debug + Display + Hash + Ord + Clone> {
+    initial_props: HashSet<&'a Proposition<PropositionId>>,
+    goals: HashSet<&'a Proposition<PropositionId>>,
+    actions: HashSet<Action<'a, ActionId, PropositionId>>
 }
 
-#[cfg(any(feature = "toml", feature = "wasm"))]
-#[derive(Deserialize)]
-struct ConfigAction {
-    name: String,
-    reqs: Vec<String>,
-    effects: Vec<String>,
+pub struct GraphPlan<'a,
+                     ActionId: Debug + Hash + Ord + Clone,
+                     PropositionId: Debug + Display + Hash + Ord + Clone> {
+    plangraph: PlanGraph<'a, ActionId, PropositionId>,
 }
 
-pub struct GraphPlan<ActionId: Debug + Hash + Ord + Clone,
-                     PropositionId: Debug + Display + Hash + Ord + Clone,
-                     T: GraphPlanSolver<ActionId, PropositionId>> {
-    pub solver: T,
-    pub plangraph: PlanGraph<ActionId, PropositionId>,
-}
+impl<'a,
+     ActionId: Debug + Hash + Ord + Clone,
+     PropositionId: Debug + Display + Hash + Ord + Clone> GraphPlan<'a, ActionId, PropositionId> {
 
-impl<ActionId: Debug + Hash + Ord + Clone,
-     PropositionId: Debug + Display + Hash + Ord + Clone,
-     T: GraphPlanSolver<ActionId, PropositionId>> GraphPlan<ActionId, PropositionId, T> {
-    pub fn new(initial_props: HashSet<Proposition<PropositionId>>,
-               goals: HashSet<Proposition<PropositionId>>,
-               actions: HashSet<Action<ActionId, PropositionId>>,
-               solver: T) -> GraphPlan<ActionId, PropositionId, T> {
-        let pg = PlanGraph::new(initial_props, goals, actions);
-        GraphPlan {
-            solver,
-            plangraph: pg
-        }
-    }
-
-    pub fn search(&mut self) -> Option<Solution<ActionId, PropositionId>>{
-        self.plangraph.search_with(&self.solver)
-    }
-}
-
-impl GraphPlan<String, String, SimpleSolver> {
-    #[cfg(any(feature = "toml", feature = "wasm"))]
-    pub fn from_toml_string(string: String) -> GraphPlan<String, String, SimpleSolver> {
-        let config: Config = toml::from_str(&string).expect("Fail");
-        let initial_props: HashSet<Proposition<String>> = config.initial
-            .iter()
-            .map(|i| Proposition::new(i.to_owned().replace("not_", ""),
-                                      i.starts_with("not_")))
-            .collect();
-        let goals: HashSet<Proposition<String>> = config.goals
-            .iter()
-            .map(|i| Proposition::new(i.to_owned().replace("not_", ""),
-                                      i.starts_with("not_")))
-            .collect();
-        let actions: HashSet<Action<String, String>> = config.actions
-            .iter()
-            .map(|i| {
-                let reqs: HashSet<Proposition<String>> = i.reqs.iter()
-                    .map(|r| Proposition::new(r.clone().replace("not_", ""),
-                                              r.starts_with("not_")))
-                    .collect();
-                let effects: HashSet<Proposition<String>> = i.effects.iter()
-                    .map(|e| Proposition::new(e.clone().replace("not_", ""),
-                                              e.starts_with("not_")))
-                    .collect();
-                Action::new(
-                    i.name.to_string(),
-                    reqs.iter().collect(),
-                    effects.iter().collect()
-                )
-            })
-            .collect();
-        let solver = SimpleSolver::default();
-        GraphPlan::new(
+    /// Returns a new GraphPlan. Note: you probably want to use
+    /// `from_domain` instead.
+    pub fn new(initial_props: HashSet<&'a Proposition<PropositionId>>,
+               goals: HashSet<&'a Proposition<PropositionId>>,
+               actions: HashSet<&'a Action<'a, ActionId, PropositionId>>)
+               -> GraphPlan<'a, ActionId, PropositionId> {
+        let plangraph = PlanGraph::new(
             initial_props,
             goals,
             actions,
-            solver
-        )
+        );
+        GraphPlan { plangraph }
     }
 
-    #[cfg(any(feature = "toml", feature = "wasm"))]
-    pub fn from_toml(filepath: String) -> GraphPlan<String, String, SimpleSolver> {
-        let string = fs::read_to_string(filepath).expect("Failed to read file");
-        GraphPlan::from_toml_string(string)
+    pub fn from_domain(domain: &'a Domain<'a, ActionId, PropositionId>)
+               -> GraphPlan<'a, ActionId, PropositionId> {
+        let plangraph = PlanGraph::new(
+            domain.initial_props.clone(),
+            domain.goals.clone(),
+            domain.actions.iter().collect(),
+        );
+        GraphPlan { plangraph }
+    }
+
+    /// Returns a domain with all maintenance actions.automatically
+    /// created. This is needed to avoid lifetime issues with PlanGraph
+    pub fn create_domain(initial_props: HashSet<&'a Proposition<PropositionId>>,
+                         goals: HashSet<&'a Proposition<PropositionId>>,
+                         actions: HashSet<&'a Action<'a, ActionId, PropositionId>>)
+                         -> Domain<'a, ActionId, PropositionId> {
+        let mut all_actions = HashSet::new();
+
+        for p in &initial_props {
+            all_actions.insert(Action::new_maintenance(*p));
+        }
+
+        for a in actions {
+            all_actions.insert(a.to_owned());
+
+            for p in &a.reqs {
+                all_actions.insert(Action::new_maintenance(p));
+            }
+
+            for p in &a.effects {
+                all_actions.insert(Action::new_maintenance(p));
+            }
+        }
+
+        Domain {
+            initial_props,
+            goals,
+            actions: all_actions,
+        }
+    }
+
+    pub fn search<Solver>(&mut self) -> Option<Solution<'a, ActionId, PropositionId>>
+        where Solver: GraphPlanSolver<'a, ActionId, PropositionId> {
+
+        let mut tries = 0;
+        let mut solution = None;
+        let max_tries = self.plangraph.actions.len() + 1;
+
+        while tries < max_tries {
+            self.plangraph.extend();
+            // This doesn't provide early termination for _all_
+            // cases that won't yield a solution.
+            if self.plangraph.has_leveled_off() {
+                break;
+            }
+
+            if !self.plangraph.has_possible_solution() {
+                debug!("No solution exists at depth {}", self.plangraph.depth());
+                tries += 1;
+                continue
+            }
+
+            if let Some(result) = Solver::search(&self.plangraph) {
+                solution = Some(result);
+                break;
+            } else {
+                debug!("No solution found at depth {}", self.plangraph.depth());
+                tries += 1
+            }
+        };
+
+        solution
+    }
+
+    /// Takes a solution and filters out maintenance actions
+    pub fn format_plan(solution: Solution<ActionId, PropositionId>) -> Solution<ActionId, PropositionId> {
+        solution.iter()
+            .map(|s| s.iter()
+                 .filter(|i| match i.id {
+                     ActionType::Action(_) => true,
+                     ActionType::Maintenance(_) => false})
+                 .cloned()
+                 .collect())
+            .collect()
     }
 }
 
@@ -133,31 +154,28 @@ mod integration_test {
         let not_p2 = p2.negate();
 
         let a1 = Action::new(
-            String::from("coffee"),
+            "coffee",
             hashset!{&p1},
             hashset!{&not_p1}
         );
 
         let a2 = Action::new(
-            String::from("walk dog"),
+            "walk dog",
             hashset!{&p2, &not_p1},
             hashset!{&not_p2},
         );
 
-        let mut pg = GraphPlan::new(
-            hashset!{p1, p2},
-            hashset!{not_p1, not_p2},
-            hashset!{a1, a2},
-            SimpleSolver::default()
-        );
-        assert!(pg.search() != None, "Solution should not be None");
-    }
+        let actions = hashset!{&a1, &a2};
+        let initial_props = hashset!{&p1, &p2};
+        let goals = hashset!{&not_p1, &not_p2};
 
-    #[cfg(any(feature = "toml", feature = "wasm"))]
-    #[test]
-    fn load_from_toml_config() {
-        let path = String::from("resources/rocket_domain.toml");
-        let mut pg: GraphPlan<_, _, SimpleSolver> = GraphPlan::from_toml(path);
-        assert!(pg.search() != None, "Solution should not be None");
+        let domain = GraphPlan::create_domain(
+            initial_props,
+            goals,
+            actions,
+        );
+
+        let mut pg = GraphPlan::<&str, &str>::from_domain(&domain);
+        assert!(pg.search::<SimpleSolver>() != None, "Solution should not be None");
     }
 }

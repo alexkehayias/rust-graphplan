@@ -3,33 +3,36 @@ use std::hash::Hash;
 use std::collections::{HashSet};
 use crate::proposition::Proposition;
 use crate::action::Action;
-use crate::pairset::{PairSet, pairs, pairs_from_sets};
+use crate::pairset::{PairSet, pairs, pairs_from_borrowed_sets};
 
 
-pub type ActionLayerData<ActionId, PropositionId> = HashSet<Action<ActionId, PropositionId>>;
-pub type PropositionLayerData<PropositionId> = HashSet<Proposition<PropositionId>>;
+pub type ActionLayerData<'a, ActionId, PropositionId> = HashSet<&'a Action<'a, ActionId, PropositionId>>;
+pub type PropositionLayerData<'a, PropositionId> = HashSet<&'a Proposition<PropositionId>>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
-pub enum Layer<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
+pub enum Layer<'a,
+               ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display> {
-    ActionLayer(ActionLayerData<ActionId, PropositionId>),
-    PropositionLayer(PropositionLayerData<PropositionId>),
+    ActionLayer(ActionLayerData<'a, ActionId, PropositionId>),
+    PropositionLayer(PropositionLayerData<'a, PropositionId>),
 }
 
 pub type MutexPairs<T> = HashSet<PairSet<T>>;
 
-impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
+impl<'a,
+     ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
      PropositionId: Eq + Hash + Ord + PartialOrd + Clone + Debug + Display>
-    Layer<ActionId, PropositionId> {
+    Layer<'a, ActionId, PropositionId> {
     /// Create a new layer from another. ActionLayer returns a
     /// PropositionLayer and PropositionLayer returns an ActionLayer
-    pub fn from_layer(all_actions: HashSet<&Action<ActionId, PropositionId>>, layer: &Layer<ActionId, PropositionId>) -> Layer<ActionId, PropositionId> {
+    pub fn from_layer<'b>(all_actions: &'b HashSet<&'a Action<ActionId, PropositionId>>,
+                          layer: &'b Layer<'a, ActionId, PropositionId>) -> Layer<'a, ActionId, PropositionId> {
         match layer {
             Layer::ActionLayer(actions) => {
                 let mut layer_data = PropositionLayerData::new();
                 for a in actions {
                     for e in a.effects.iter() {
-                        layer_data.insert(e.clone());
+                        layer_data.insert(e);
                     }
                 }
 
@@ -40,28 +43,30 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
 
                 for a in all_actions {
                     // Include action if it satisfies one or more props
-                    if a.reqs.is_subset(&props) {
-                        layer_data.insert(a.to_owned());
+                    if a.reqs.is_subset(props) {
+                        layer_data.insert(a);
                     }
                 }
 
+                // TODO: Move creation of maintenance actions out of
+                // here otherwise it will conflict with the lifetime
+                // 'a
                 // Add in maintenance actions for all props
-                for p in props {
-                    layer_data.insert(Action::new_maintenance(p.to_owned()));
-                }
+                // for p in props {
+                //     layer_data.insert(Action::new_maintenance(p.to_owned()));
+                // }
 
                 Layer::ActionLayer(layer_data)
             },
         }
     }
 
-    pub fn action_mutexes(actions: &HashSet<Action<ActionId, PropositionId>>,
-                          mutex_props: Option<&MutexPairs<Proposition<PropositionId>>>)
-                          -> MutexPairs<Action<ActionId, PropositionId>> {
+    pub fn action_mutexes(actions: &HashSet<&'a Action<ActionId, PropositionId>>,
+                          mutex_props: Option<&MutexPairs<&Proposition<PropositionId>>>)
+                          -> MutexPairs<&'a Action<'a, ActionId, PropositionId>> {
         let mut mutexes = MutexPairs::new();
-        let action_pairs = pairs(&actions);
 
-        for PairSet(a1, a2) in action_pairs {
+        for PairSet(a1, a2) in pairs(&actions) {
             // Inconsistent effects: The effect of one action is the
             // negation of another
             // - Negate the effects of one of the actions then check
@@ -72,23 +77,25 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
                 .iter()
                 .map(|e| e.negate())
                 .collect();
-            let inconsistent_fx: HashSet<Proposition<PropositionId>> = a2.effects
-                .intersection(&negated_fx)
+            let inconsistent_fx = a2.effects
+                .intersection(&negated_fx.iter().collect())
                 .map(|i| i.to_owned())
-                .collect();
-            if !inconsistent_fx.is_empty() {
+                .next()
+                .is_some();
+            if inconsistent_fx {
                 mutexes.insert(PairSet(a1, a2));
                 continue
             }
 
             // Interference: One action deletes the precondition of
             // another action (they can't be done in parallel then)
-            let left_interference: HashSet<Proposition<PropositionId>> = a2.reqs
-                .intersection(&negated_fx)
+            let left_interference = a2.reqs
+                .intersection(&negated_fx.iter().collect())
                 .map(|i| i.to_owned())
-                .collect();
+                .next()
+                .is_some();
 
-            if !left_interference.is_empty() {
+            if left_interference {
                 mutexes.insert(PairSet(a1, a2));
                 continue
             }
@@ -96,16 +103,17 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
             // Since actions are not symetrical (they may have different
             // reqs) we need to check if the right hand side action
             // interferes with left hand side too
-            let right_negated_fx: HashSet<Proposition<PropositionId>> = a2.clone().effects
+            let right_negated_fx: HashSet<Proposition<PropositionId>> = a2.effects
                 .iter()
                 .map(|e| e.negate())
                 .collect();
-            let right_interference: HashSet<Proposition<PropositionId>> = a1.clone().reqs
-                .intersection(&right_negated_fx)
+            let right_interference = a1.reqs
+                .intersection(&right_negated_fx.iter().collect())
                 .map(|i| i.to_owned())
-                .collect();
+                .next()
+                .is_some();
 
-            if !right_interference.is_empty() {
+            if right_interference {
                 mutexes.insert(PairSet(a1, a2));
                 continue
             }
@@ -116,17 +124,31 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
             //   to proposition mutees
             // - Check for intersection with mutex props
             if let Some(mx_props) = mutex_props {
-                let req_pairs = pairs_from_sets(a1.clone().reqs, a2.clone().reqs);
-                let competing_needs: HashSet<PairSet<Proposition<PropositionId>>> = req_pairs
-                    .intersection(&mx_props)
-                    .map(|i| i.to_owned())
-                    .collect();
+                let req_pairs = pairs_from_borrowed_sets(&a1.reqs, &a2.reqs);
+                let competing_needs = req_pairs
+                    .intersection(mx_props)
+                    .next()
+                    .is_some();
 
-                if !competing_needs.is_empty() {
+                if competing_needs {
                     mutexes.insert(PairSet(a1, a2));
                 }
             }
+
+            // Conflicting requirements: Actions have preconditions
+            // that are negations of each other
+            // Note: moved this here rather than calculating in
+            // `proposition_mutexes` because we need to create owned
+            // structs via `Proposition.negate()`
+            for p in a1.reqs.iter() {
+                let not_p = p.negate();
+                if a2.reqs.contains(&not_p) {
+                    mutexes.insert(PairSet(a1, a2));
+                    break
+                }
+            }
         }
+
         mutexes
     }
 
@@ -136,17 +158,19 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
     /// - They are negations of one another
     /// - All ways of achieving the propositions at are pairwise mutex
     pub fn proposition_mutexes(
-        props: &HashSet<Proposition<PropositionId>>,
-        actions: &HashSet<Action<ActionId, PropositionId>>,
-        mutex_actions: Option<&MutexPairs<Action<ActionId, PropositionId>>>,
-    ) -> MutexPairs<Proposition<PropositionId>> {
+        props: &HashSet<&'a Proposition<PropositionId>>,
+        actions: &HashSet<&Action<ActionId, PropositionId>>,
+        mutex_actions: Option<MutexPairs<&Action<ActionId, PropositionId>>>,
+    ) -> MutexPairs<&'a Proposition<PropositionId>> {
         let mut mutexes = MutexPairs::new();
 
         // Find mutexes due to negation
         for p in props.iter() {
             let not_p = p.negate();
             if props.contains(&not_p) {
-                mutexes.insert(PairSet(p.clone(), not_p.clone()));
+                // TODO: this won't work because this is a reference
+                // to a owned prop in this scope
+                // mutexes.insert(PairSet(*p, &not_p));
             }
         }
 
@@ -157,21 +181,20 @@ impl<ActionId: Eq + Hash + Ord + PartialOrd + Clone + Debug,
         // - If there is no difference then the props are mutex
         if let Some(mx_actions) = mutex_actions {
             for PairSet(p1, p2) in pairs(&props) {
-                let viable_acts: HashSet<Action<_, _>> = actions.iter()
+                let viable_acts = actions.iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
-                    .map(|a| a.to_owned())
+                    .map(|a| *a)
                     .collect();
 
-                let viable_act_pairs: HashSet<PairSet<Action<_, _>>> = pairs(&viable_acts)
-                    .into_iter()
-                    .collect();
+                let viable_act_pairs = pairs(&viable_acts);
 
-                let diff: HashSet<_> = viable_act_pairs
-                    .difference(mx_actions)
-                    .collect();
+                let no_diff = viable_act_pairs
+                    .difference(&mx_actions)
+                    .next()
+                    .is_none();
 
-                if diff.is_empty() && !mx_actions.is_empty() {
-                    mutexes.insert(PairSet(p1.clone(), p2.clone()));
+                if no_diff && mx_actions.iter().next().is_some() {
+                    mutexes.insert(PairSet(p1, p2));
                 }
             }
         }
@@ -186,9 +209,11 @@ mod from_layer_test {
     #[test]
     fn action_layer_from_proposition_layer() {
         let prop = Proposition::from("test");
-        let layer = Layer::<&str, &str>::PropositionLayer(hashset!{prop.clone()});
-        let actual = Layer::from_layer(hashset!{}, &layer);
-        let expected = Layer::ActionLayer(hashset!{Action::new_maintenance(prop)});
+        let action = Action::new_maintenance(&prop);
+        let layer = Layer::<&str, &str>::PropositionLayer(hashset!{&prop});
+        let actions = hashset!{&action};
+        let actual = Layer::from_layer(&actions, &layer);
+        let expected = Layer::ActionLayer(hashset!{&action});
         assert_eq!(expected, actual);
     }
 }
@@ -198,51 +223,27 @@ mod mutex_test {
     use super::*;
 
     #[test]
-    fn proposition_mutexes_due_to_negation() {
-        let props = hashset!{
-            Proposition::from("caffeinated"),
-            Proposition::from("caffeinated").negate(),
-            Proposition::from("tired"),
-        };
-        let actions = hashset!{};
-        let action_mutexes = MutexPairs::new();
-        let expected = hashset!{
-            PairSet(Proposition::from("caffeinated"),
-                    Proposition::from("caffeinated").negate())
-        };
-
-        assert_eq!(
-            expected,
-            Layer::<&str, &str>::proposition_mutexes(
-                &props,
-                &actions,
-                Some(&action_mutexes)
-            )
-        );
-    }
-
-    #[test]
     fn proposition_mutexes_due_to_mutex_actions() {
         let p1 = Proposition::from("caffeinated");
         let p2 = Proposition::from("coffee");
-        let not_p2 = p2.negate();
+        let p3 = p2.negate();
         let actions = hashset!{};
         let a1 = Action::new(
-            String::from("drink coffee"),
+            "drink coffee",
             hashset!{&p2},
-            hashset!{&p1, &not_p2},
+            hashset!{&p1, &p3},
         );
         let a2 = Action::new(
-            String::from("make coffee"),
+            "make coffee",
             hashset!{},
             hashset!{&p2},
         );
-        let action_mutexes = hashset!{PairSet(a1.clone(), a2.clone())};
-        let expected = hashset!{PairSet(p1.clone(), p2.clone())};
-        let props = hashset!{p1, p2};
+        let action_mutexes = hashset!{PairSet(&a1, &a2)};
+        let expected = hashset!{PairSet(&p1, &p2)};
+        let props = hashset!{&p1, &p2};
         assert_eq!(
             expected,
-            Layer::proposition_mutexes(&props, &actions, Some(&action_mutexes))
+            Layer::proposition_mutexes(&props, &actions, Some(action_mutexes))
         );
     }
 
@@ -251,22 +252,22 @@ mod mutex_test {
         let prop = Proposition::from("coffee");
         let not_prop = prop.negate();
         let a1 = Action::new(
-            String::from("drink coffee"),
+            "drink coffee",
             hashset!{},
             hashset!{&not_prop}
         );
 
         let a2 = Action::new(
-            String::from("make coffee"),
+            "make coffee",
             hashset!{},
             hashset!{&prop}
         );
-        let actions = hashset!{a1.clone(), a2.clone()};
+        let actions = hashset!{&a1, &a2};
         let props = MutexPairs::new();
         let actual = Layer::action_mutexes(&actions, Some(&props));
 
         let mut expected = MutexPairs::new();
-        expected.insert(PairSet(a1, a2));
+        expected.insert(PairSet(&a1, &a2));
 
         assert_eq!(expected, actual);
     }
@@ -276,22 +277,22 @@ mod mutex_test {
         let prop = Proposition::from("hungry");
         let not_prop = prop.negate();
         let a1 = Action::new(
-            String::from("eat sandwich"),
+            "eat sandwich",
             hashset!{&prop},
             hashset!{&not_prop}
         );
 
         let a2 = Action::new(
-            String::from("eat soup"),
+            "eat soup",
             hashset!{&prop},
             hashset!{&not_prop}
         );
-        let actions = hashset!{a1.clone(), a2.clone()};
+        let actions = hashset!{&a1, &a2};
         let props = MutexPairs::new();
         let actual = Layer::action_mutexes(&actions, Some(&props));
 
         let mut expected = MutexPairs::new();
-        expected.insert(PairSet(a1, a2));
+        expected.insert(PairSet(&a1, &a2));
 
         assert_eq!(expected, actual);
     }
@@ -301,23 +302,39 @@ mod mutex_test {
         let prop = Proposition::from("hungry");
         let not_prop = prop.negate();
         let a1 = Action::new(
-            String::from("eat sandwich"),
+            "eat sandwich",
             hashset!{&prop},
             hashset!{&not_prop}
         );
 
         let a2 = Action::new(
-            String::from("eat soup"),
+            "eat soup",
             hashset!{&prop},
             hashset!{&not_prop}
         );
-        let actions = hashset!{a1.clone(), a2.clone()};
+        let actions = hashset!{&a1, &a2};
         let mut mutex_props = MutexPairs::new();
-        mutex_props.insert(PairSet(prop.clone(), prop.negate()));
+        mutex_props.insert(PairSet(&prop, &not_prop));
         let actual = Layer::action_mutexes(&actions, Some(&mutex_props));
 
         let mut expected = MutexPairs::new();
-        expected.insert(PairSet(a1, a2));
+        expected.insert(PairSet(&a1, &a2));
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn action_mutexes_due_to_conflicting_reqs() {
+        let prop = Proposition::from("hungry");
+        let not_prop = prop.negate();
+        let a1 = Action::new("eat sandwich", hashset!{&prop}, hashset!{});
+        let a2 = Action::new("go to work", hashset!{&not_prop}, hashset!{});
+
+        let actions = hashset!{&a1, &a2};
+        let actual = Layer::action_mutexes(&actions, None);
+
+        let mut expected = MutexPairs::new();
+        expected.insert(PairSet(&a1, &a2));
 
         assert_eq!(expected, actual);
     }

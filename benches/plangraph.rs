@@ -26,11 +26,11 @@ fn plangraph_benchmark(c: &mut Criterion) {
         hashset!{&not_p2},
     );
 
-    c.bench_function("plangraph 100", move |b| b.iter(||{
+    c.bench_function("plangraph 100", |b| b.iter(||{
         let mut pg = PlanGraph::new(
-            hashset!{p1.clone(), p2.clone(), p3.clone()},
-            hashset!{not_p1.clone(), not_p2.clone(), p3.clone()},
-            hashset!{a1.clone(), a2.clone()}
+            hashset!{&p1, &p2, &p3},
+            hashset!{&not_p1, &not_p2, &p3},
+            hashset!{&a1, &a2}
         );
         for _ in 0..100 {
             pg.extend();
