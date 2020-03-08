@@ -35,7 +35,6 @@ license = "EPL-1.0"
 criterion = "0.3"
 
 [dependencies]
-itertools = "0.8"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
 
 [lib]
