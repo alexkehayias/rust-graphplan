@@ -121,7 +121,10 @@ impl<'a,
             } else {
                 let goal = &goals[goal_idx];
                 debug!("Working on goal {:?}", goal);
+
                 let mut available = BTreeSet::new();
+                let accum = &self.accum;
+
                 // Only actions that produce the goal and are not
                 // mutex with any other actions and have not
                 // already been attempted in combination with the
@@ -136,18 +139,15 @@ impl<'a,
 
                     // Early break if we already know this action
                     // works for the goal from previous attempts
-                    if self.accum.get(&goal_idx).map(|i| i == a).unwrap_or(false) {
+                    if accum.get(&goal_idx).map(|i| i == a).unwrap_or(false) {
                         available.insert(a.clone());
                         break
                     };
 
                     // Check if this action is mutex with any of
                     // the other accumulated actions
-                    let acts = self.accum.clone();
-                    let pairs = pairs_from_sets(
-                        hashset!{*a},
-                        acts.values().into_iter().map(|i| *i).collect()
-                    );
+                    let acts = accum.values().into_iter().map(|i| *i).collect();
+                    let pairs = pairs_from_sets(hashset!{*a}, acts);
                     debug!("Checking pairs: {:?} against mutexes: {:?}", &pairs, &self.meta.mutexes);
 
                     if let Some(muxes) = &self.meta.mutexes {
