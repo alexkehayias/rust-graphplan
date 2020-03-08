@@ -3,7 +3,6 @@ use std::hash::Hash;
 use std::iter::FromIterator;
 use std::collections::{HashMap, HashSet, BTreeSet, VecDeque};
 use log::{debug};
-use itertools::Itertools;
 use crate::proposition::Proposition;
 use crate::action::{Action, ActionType};
 use crate::pairset::{pairs_from_sets};
@@ -36,7 +35,7 @@ struct ActionCombination<'a,
 struct GoalSetActionGenerator<'a,
                               ActionId: Debug + Hash + Clone + Eq + Ord,
                               PropositionId: Debug + Display + Hash + Clone + Eq + Ord> {
-    goals: Vec<&'a Proposition<PropositionId>>,
+    goals: BTreeSet<&'a Proposition<PropositionId>>,
     actions: BTreeSet<&'a Action<'a, ActionId, PropositionId>>,
     mutexes: Option<MutexPairs<&'a Action<'a, ActionId, PropositionId>>>,
 }
@@ -45,7 +44,7 @@ impl<'a,
      ActionId: Ord + Clone + Hash + Debug,
      PropositionId: Ord + Clone + Hash + Debug + Display>
     GoalSetActionGenerator<'a, ActionId, PropositionId> {
-    pub fn new(goals: Vec<&'a Proposition<PropositionId>>,
+    pub fn new(goals: BTreeSet<&'a Proposition<PropositionId>>,
                actions: BTreeSet<&'a Action<'a, ActionId, PropositionId>>,
                mutexes: Option<MutexPairs<&'a Action<'a, ActionId, PropositionId>>>,)
                -> GoalSetActionGenerator<'a, ActionId, PropositionId> {
@@ -96,7 +95,7 @@ impl<'a,
     type Item = ActionCombination<'a, ActionId, PropositionId>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let goals = &self.meta.goals;
+        let goals = Vec::from_iter(&self.meta.goals);
         let actions = &self.meta.actions;
         let goal_len = goals.len();
 
@@ -131,7 +130,7 @@ impl<'a,
                 for a in actions {
                     // Early continue since the later checks are
                     // more expensive
-                    if !a.effects.contains(goal) {
+                    if !a.effects.contains(*goal) {
                         continue
                     };
 
@@ -215,7 +214,7 @@ mod goal_set_action_generator_test {
     fn single_goal() {
         let p1 = Proposition::from("coffee");
         let p2 = Proposition::from("caffeinated");
-        let goals = vec![&p2];
+        let goals = btreeset!{&p2};
 
         let mut actions = BTreeSet::new();
         let a1 = Action::new(
@@ -240,21 +239,21 @@ mod goal_set_action_generator_test {
         let p2 = Proposition::from("caffeinated");
         let p3 = Proposition::from("breakfast");
         let p4 = Proposition::from("full");
-        let goals = vec![&p2, &p4];
-        let mut actions = BTreeSet::new();
+
         let a1 = Action::new(
             String::from("drink coffee"),
             hashset!{&p1},
             hashset!{&p2}
         );
-        actions.insert(&a1);
 
         let a2 = Action::new(
             String::from("eat breakfast"),
             hashset!{&p3},
             hashset!{&p4}
         );
-        actions.insert(&a2);
+
+        let actions = btreeset!{&a1, &a2};
+        let goals = btreeset!{&p2, &p4};
 
         let mutexes = Some(MutexPairs::new());
         let expected = ActionCombination(hashmap!{0usize => &a1, 1usize => &a2});
@@ -273,36 +272,14 @@ mod goal_set_action_generator_test {
         let p4 = Proposition::from("scone");
         let p5 = Proposition::from("muffin");
         let p6 = Proposition::from("full");
-        let goals = vec![&p3, &p6];
-        let mut actions = BTreeSet::new();
 
-        let a1 = Action::new(
-            "drink coffee",
-            hashset!{&p2},
-            hashset!{&p3}
-        );
-        actions.insert(&a1);
+        let a1 = Action::new("drink coffee", hashset!{&p2}, hashset!{&p3});
+        let a2 = Action::new("drink tea", hashset!{&p1}, hashset!{&p3});
+        let a3 = Action::new("eat scone", hashset!{&p4}, hashset!{&p6});
+        let a4 = Action::new("eat muffin", hashset!{&p5}, hashset!{&p6});
 
-        let a2 = Action::new(
-            "drink tea",
-            hashset!{&p1},
-            hashset!{&p3}
-        );
-        actions.insert(&a2);
-
-        let a3 = Action::new(
-            "eat scone",
-            hashset!{&p4},
-            hashset!{&p6}
-        );
-        actions.insert(&a3);
-
-        let a4 = Action::new(
-            "eat muffin",
-            hashset!{&p5},
-            hashset!{&p6}
-        );
-        actions.insert(&a4);
+        let actions = btreeset!{&a1, &a2, &a3, &a4};
+        let goals = btreeset!{&p3, &p6};
 
         let mutexes = Some(MutexPairs::new());
         let expected = vec![
@@ -327,7 +304,7 @@ mod goal_set_action_generator_test {
     }
 }
 
-type SearchStack<'a, ActionId, PropositionId> = VecDeque<(usize, Vec<&'a Proposition<PropositionId>>, Option<ActionCombinationIterator<'a, ActionId, PropositionId>>)>;
+type SearchStack<'a, ActionId, PropositionId> = VecDeque<(usize, BTreeSet<&'a Proposition<PropositionId>>, Option<ActionCombinationIterator<'a, ActionId, PropositionId>>)>;
 
 impl<'a,
      ActionId: Ord + Clone + Hash + Debug,
@@ -336,11 +313,13 @@ impl<'a,
     fn search<'b>(plangraph: &'b PlanGraph<'a, ActionId, PropositionId>) -> Option<Solution<'a, ActionId, PropositionId>> {
         let mut success = false;
         let mut plan = Vec::new();
-        let mut failed_goals_memo: HashSet<(usize, Vec<&Proposition<PropositionId>>)> = HashSet::new();
+        // HashSets are not Hash so we can't use them here. However,
+        // BTreeSets are Hash so we can use that here
+        let mut failed_goals_memo: HashSet<(usize, BTreeSet<&Proposition<PropositionId>>)> = HashSet::new();
 
         // Initialize the loop
         let mut stack: SearchStack<ActionId, PropositionId> = VecDeque::new();
-        let init_goals = Vec::from_iter(plangraph.goals.clone());
+        let init_goals = BTreeSet::from_iter(plangraph.goals.clone());
         let init_layer_idx = plangraph.layers.len() - 1;
         let init_action_gen = None;
 
@@ -348,8 +327,10 @@ impl<'a,
 
         while let Some((idx, goals, action_gen)) = stack.pop_front() {
             debug!("Working on layer {:?} with goals {:?}", idx, goals);
-            // Check if the goal set is unsolvable at level idx
-            if failed_goals_memo.contains(&(idx, goals.clone())) {
+            // HashSets are not Hash so we convert goals into a BTreeSet
+            let goals_as_btree = BTreeSet::from_iter(goals.clone());
+            // Check if the goal set is unsolvablpe at level idx
+            if failed_goals_memo.contains(&(idx, goals_as_btree.clone())) {
                 // Continue to previous layer (the next element in the queue)
                 continue;
             }
@@ -403,7 +384,6 @@ impl<'a,
                 } else {
                     let next_goals = goal_action_set.iter()
                         .flat_map(|action| action.reqs.clone())
-                        .unique()
                         .collect();
 
                     plan.push(goal_action_set);
@@ -415,7 +395,7 @@ impl<'a,
                 debug!("Unable to find actions for goals {:?} from actions {:?}",
                        goals, actions);
                 // Record the failed goals at level idx
-                failed_goals_memo.insert((idx, goals.clone()));
+                failed_goals_memo.insert((idx, goals_as_btree));
                 // Remove the last step in the plan from which this
                 // set of goals comes from
                 plan.pop();
