@@ -109,10 +109,10 @@ pub fn pairs_from_borrowed_sets<'p, T: Eq + Hash + Clone + Ord>(
 ) -> HashSet<PairSet<&'p T>> {
     let mut accum = HashSet::new();
 
-    let mut sorted1 = Vec::from_iter(items1.into_iter());
+    let mut sorted1 = Vec::from_iter(items1.iter());
     sorted1.sort();
 
-    let mut sorted2 = Vec::from_iter(items2.into_iter());
+    let mut sorted2 = Vec::from_iter(items2.iter());
     sorted2.sort();
 
     for i in sorted1.iter() {

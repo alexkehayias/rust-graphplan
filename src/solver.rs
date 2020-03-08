@@ -140,19 +140,19 @@ impl<'a,
                     // Early break if we already know this action
                     // works for the goal from previous attempts
                     if accum.get(&goal_idx).map(|i| i == a).unwrap_or(false) {
-                        available.insert(a.clone());
+                        available.insert(*a);
                         break
                     };
 
                     // Check if this action is mutex with any of
                     // the other accumulated actions
-                    let acts = accum.values().into_iter().map(|i| *i).collect();
+                    let acts = accum.values().copied().collect();
                     let pairs = pairs_from_sets(hashset!{*a}, acts);
                     debug!("Checking pairs: {:?} against mutexes: {:?}", &pairs, &self.meta.mutexes);
 
                     if let Some(muxes) = &self.meta.mutexes {
                         if muxes.intersection(&pairs).next().is_none() {
-                            available.insert(a.clone());
+                            available.insert(*a);
                         }
                     };
                 };
@@ -173,7 +173,7 @@ impl<'a,
             } else {
                 let next_action = available_actions.iter().next().unwrap();
                 // TODO only add the action if the goal isn't met yet
-                self.accum.insert(goal_idx, next_action.clone());
+                self.accum.insert(goal_idx, *next_action);
 
                 // Add to previous attempts in case we need to backtrack
                 let mut remaining_actions = available_actions.clone();
@@ -367,14 +367,14 @@ impl<'a,
                 debug!("Actions: {:?} for goals: {:?}", goal_actions, goals);
                 // If we are are on the second to last proposition
                 // layer, we are done
-                let goal_action_set = goal_actions.0.values()
-                    .into_iter()
+                let goal_action_set = goal_actions.0
+                    .values()
                     // Don't include maintenance actions in Solution
                     .filter(|a| match a.id {
                         ActionType::Action(_) => true,
                         ActionType::Maintenance(_) => false
                     })
-                    .map(|i| *i)
+                    .copied()
                     .collect::<HashSet<&'a Action<ActionId, PropositionId>>>();
                 if (idx - 2) == 0 {
                     plan.push(goal_action_set);

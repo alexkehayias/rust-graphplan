@@ -56,8 +56,8 @@ impl<'a, ActionId: Hash + Clone, PropositionId: Display + Hash + Clone + Partial
                -> Action<'a, ActionId, PropositionId> {
         Action {
             id: ActionType::Action(id),
-            reqs: reqs,
-            effects: effects,
+            reqs,
+            effects,
         }
     }
 

@@ -62,7 +62,7 @@ impl<'a,
                         .intersection(mux)
                         .next()
                         .is_none()})
-                .map(|i| *i)
+                .copied()
                 .collect::<HashSet<&'a Action<'a, ActionId, PropositionId>>>()
         } else {
             actions.to_owned()

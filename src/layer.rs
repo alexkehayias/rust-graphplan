@@ -183,7 +183,7 @@ impl<'a,
             for PairSet(p1, p2) in pairs(&props) {
                 let viable_acts = actions.iter()
                     .filter(|a| a.effects.contains(&p1) || a.effects.contains(&p2))
-                    .map(|a| *a)
+                    .copied()
                     .collect();
 
                 let viable_act_pairs = pairs(&viable_acts);
