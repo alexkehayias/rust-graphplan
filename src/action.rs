@@ -102,12 +102,11 @@ mod test_action {
 
     #[test]
     fn hashing_works() {
-        let a: Action<TestActionId, &str> = Action::new(TestActionId::A, hashset!{}, hashset!{});
+        let a1: Action<TestActionId, &str> = Action::new(TestActionId::A, hashset!{}, hashset!{});
         let a2 = Action::new(TestActionId::A, hashset!{}, hashset!{});
-        let set = hashset!{a.clone(), a2};
+        let set = hashset!{a1, a2};
         assert_eq!(set.len(), 1);
     }
-
 
     #[test]
     fn maintenance_action_works() {
