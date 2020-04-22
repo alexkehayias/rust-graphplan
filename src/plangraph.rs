@@ -38,10 +38,6 @@ impl<'a,
         }
     }
 
-    pub fn push(&mut self, layer: Layer<'a, ActionId, PropositionId>) {
-        self.layers.push(layer)
-    }
-
     /// Extends the plangraph to depth i+1
     /// Inserts another action layer and proposition layer
     pub fn extend(&mut self) -> &mut Self {
@@ -154,5 +150,35 @@ impl<'a,
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod plangraph_test {
+    use super::*;
+    #[test]
+    fn extend_plangraph_works() {
+        let mut plangraph: PlanGraph<&'static str, &'static str> = PlanGraph::new(
+            hashset!{},
+            hashset!{},
+            hashset!{},
+        );
+
+        assert_eq!(plangraph.depth(), 0);
+        plangraph.extend();
+        assert_eq!(plangraph.depth(), 1)
+    }
+
+    #[test]
+    fn has_leveled_off_works() {
+        let mut plangraph: PlanGraph<&'static str, &'static str> = PlanGraph::new(
+            hashset!{},
+            hashset!{},
+            hashset!{},
+        );
+
+        assert_eq!(plangraph.has_leveled_off(), false);
+        plangraph.extend();
+        assert_eq!(plangraph.has_leveled_off(), true);
     }
 }
