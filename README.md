@@ -1,6 +1,6 @@
 # Graphplan
 
-![crates.io](https://img.shields.io/crates/v/graphplan.svg)
+![Rust](https://github.com/alexkehayias/rust-graphplan/workflows/Rust/badge.svg) ![crates.io](https://img.shields.io/crates/v/graphplan.svg)
 
 Implementation of the Graphplan planning algorithm and Plangraph data structure written in Rust.
 
